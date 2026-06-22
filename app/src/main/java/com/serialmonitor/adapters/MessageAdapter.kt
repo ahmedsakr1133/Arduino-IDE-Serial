@@ -1,0 +1,54 @@
+package com.serialmonitor.adapters
+
+import android.graphics.Color
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import androidx.recyclerview.widget.RecyclerView
+import com.serialmonitor.Message
+import com.serialmonitor.databinding.ItemMessageBinding
+
+class MessageAdapter(private val messages: MutableList<Message>) :
+    RecyclerView.Adapter<MessageAdapter.MessageViewHolder>() {
+
+    class MessageViewHolder(val binding: ItemMessageBinding) : RecyclerView.ViewHolder(binding.root)
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
+        val binding = ItemMessageBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
+        return MessageViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
+        val message = messages[position]
+        val context = holder.itemView.context
+        val (prefix, colorRes) = when (message.type) {
+            Message.Type.RX -> "►" to com.serialmonitor.R.color.terminal_rx
+            Message.Type.TX -> "◄" to com.serialmonitor.R.color.terminal_tx
+            Message.Type.SYS -> "ℹ" to com.serialmonitor.R.color.terminal_sys
+            Message.Type.ERR -> "✗" to com.serialmonitor.R.color.terminal_err
+        }
+
+        holder.binding.messageText.text = "${message.timestamp} [$prefix] ${message.content}"
+        holder.binding.messageText.setTextColor(androidx.core.content.ContextCompat.getColor(context, colorRes))
+    }
+
+    override fun getItemCount(): Int = messages.size
+
+    fun addMessage(message: Message) {
+        messages.add(message)
+        if (messages.size > 1000) {
+            messages.removeAt(0)
+            notifyItemRemoved(0)
+        }
+        notifyItemInserted(messages.size - 1)
+    }
+
+    fun clear() {
+        val size = messages.size
+        messages.clear()
+        notifyItemRangeRemoved(0, size)
+    }
+}

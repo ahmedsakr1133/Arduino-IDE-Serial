@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">مراقب المنفذ التسلسلي</string>
+    <string name="connect">اتصال</string>
+    <string name="disconnect">قطع الاتصال</string>
+    <string name="clear">مسح</string>
+    <string name="port">المنفذ:</string>
+    <string name="baud_rate">السرعة:</string>
+    <string name="send">إرسال</string>
+    <string name="write_command">اكتب الأمر هنا...</string>
+    <string name="received_bytes">مُستلم: %1$d بايت</string>
+    <string name="sent_bytes">مُرسل: %1$d بايت</string>
+    <string name="connected">متصل</string>
+    <string name="disconnected">غير متصل</string>
+    <string name="auto_send">تلقائي</string>
+    <string name="connecting">جارٍ الاتصال بالجهاز...</string>
+    <string name="connection_success">✓ تم الاتصال بنجاح - %1$s على سرعة %2$d</string>
+    <string name="connection_failed">✗ فشل الاتصال: تأكد من توصيل الجهاز</string>
+    <string name="connection_lost">⚠ تم قطع الاتصال</string>
+    <string name="searching_devices">ℹ جارٍ البحث عن أجهزة...</string>
+    <string name="no_devices_found">لم يتم العثور على أجهزة USB</string>
+    <string name="usb_permission_granted">تم منح إذن USB</string>
+    <string name="usb_permission_denied">تم رفض إذن USB</string>
+    <string name="screen_cleared">تم مسح الشاشة</string>
+    <string name="file_saved">تم حفظ الملف في: %1$s</string>
+    <string name="settings">الإعدادات</string>
+    <string name="advanced_settings">إعدادات متقدمة</string>
+    <string name="data_bits">بت البيانات</string>
+    <string name="stop_bits">بت التوقف</string>
+    <string name="parity">التكافؤ</string>
+    <string name="flow_control">التحكم في التدفق</string>
+    <string name="none">لا شيء</string>
+    <string name="even">زوجي</string>
+    <string name="odd">فردي</string>
+    <string name="mark">علامة</string>
+    <string name="space">مسافة</string>
+</resources>

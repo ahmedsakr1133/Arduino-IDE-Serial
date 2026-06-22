@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Arduino Uno -->
+    <usb-device vendor-id="9025" product-id="1" />
+    <usb-device vendor-id="9025" product-id="67" />
+    <usb-device vendor-id="9025" product-id="68" />
+    <usb-device vendor-id="2341" />
+
+    <!-- FTDI -->
+    <usb-device vendor-id="1027" />
+    <usb-device vendor-id="0403" />
+
+    <!-- CP210x -->
+    <usb-device vendor-id="4292" />
+    <usb-device vendor-id="10C4" />
+
+    <!-- CH340 -->
+    <usb-device vendor-id="6790" />
+    <usb-device vendor-id="1A86" />
+
+    <!-- PL2303 -->
+    <usb-device vendor-id="1659" />
+    <usb-device vendor-id="067B" />
+</resources>
