@@ -10,11 +10,9 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.util.SerialInputOutputManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.launch
 import java.io.IOException
 
 class SerialService : Service(), SerialInputOutputManager.Listener {
@@ -67,51 +65,63 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
         return START_NOT_STICKY
     }
 
-    fun connect(port: UsbSerialPort, baudRate: Int, dataBits: Int, stopBits: Int, parity: Int) {
-        val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-        connection = usbManager.openDevice(port.driver.device)
-        if (connection == null) {
-            emitEvent("ERROR: Connection failed")
-            return
-        }
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-        usbSerialPort = port
-        try {
-            port.open(connection)
-            port.setParameters(baudRate, dataBits, stopBits, parity)
-            
-            ioManager = SerialInputOutputManager(port, this)
-            ioManager?.start()
-            emitEvent("CONNECTED")
-        } catch (e: IOException) {
-            emitEvent("ERROR: ${e.message}")
-            try { port.close() } catch (ignored: Exception) {}
-            usbSerialPort = null
+    fun connect(port: UsbSerialPort, baudRate: Int, dataBits: Int, stopBits: Int, parity: Int) {
+        serviceScope.launch {
+            val usbManager = getSystemService(Context.USB_SERVICE) as UsbManager
+            try {
+                connection = usbManager.openDevice(port.driver.device)
+                if (connection == null) {
+                    emitEvent("ERROR: Connection failed (Open Device Null)")
+                    return@launch
+                }
+
+                usbSerialPort = port
+                port.open(connection)
+                port.setParameters(baudRate, dataBits, stopBits, parity)
+                
+                ioManager = SerialInputOutputManager(port, this@SerialService)
+                ioManager?.start()
+                emitEvent("CONNECTED")
+            } catch (e: Exception) {
+                emitEvent("ERROR: ${e.message}")
+                try { port.close() } catch (ignored: Exception) {}
+                usbSerialPort = null
+                connection?.close()
+                connection = null
+            }
         }
     }
 
     fun disconnect() {
-        ioManager?.stop()
-        ioManager = null
-        try { usbSerialPort?.close() } catch (ignored: Exception) {}
-        usbSerialPort = null
-        connection?.close()
-        connection = null
-        emitEvent("DISCONNECTED")
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        serviceScope.launch {
+            ioManager?.stop()
+            ioManager = null
+            try { usbSerialPort?.close() } catch (ignored: Exception) {}
+            usbSerialPort = null
+            connection?.close()
+            connection = null
+            emitEvent("DISCONNECTED")
+            withContext(Dispatchers.Main) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+        }
     }
 
     fun write(data: ByteArray) {
-        try {
-            usbSerialPort?.write(data, 1000)
-        } catch (e: IOException) {
-            emitEvent("ERROR: Write failed: ${e.message}")
+        serviceScope.launch {
+            try {
+                usbSerialPort?.write(data, 1000)
+            } catch (e: IOException) {
+                emitEvent("ERROR: Write failed: ${e.message}")
+            }
         }
     }
 
     override fun onNewData(data: ByteArray) {
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             _dataBytes.emit(data)
         }
     }
@@ -122,9 +132,14 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     }
 
     private fun emitEvent(event: String) {
-        CoroutineScope(Dispatchers.Main).launch {
+        serviceScope.launch(Dispatchers.Main) {
             _events.emit(event)
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()
     }
 
     private fun createNotificationChannel() {

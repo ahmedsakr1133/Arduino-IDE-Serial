@@ -16,7 +16,9 @@ import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.serialmonitor.adapters.MessageAdapter
 import com.serialmonitor.databinding.ActivityMainBinding
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
@@ -90,6 +92,19 @@ class MainActivity : AppCompatActivity() {
 
         setupUI()
         setupSerial()
+        
+        handleUsbIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleUsbIntent(intent)
+    }
+
+    private fun handleUsbIntent(intent: Intent?) {
+        if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            refreshPorts()
+        }
     }
 
     private fun setupUI() {
@@ -196,6 +211,8 @@ class MainActivity : AppCompatActivity() {
                 messageAdapter.addMessage(Message(getString(R.string.connection_lost), Message.Type.SYS))
             }
             event.startsWith("ERROR") -> {
+                binding.connectButton.isEnabled = true
+                binding.disconnectButton.isEnabled = false
                 messageAdapter.addMessage(Message(event, Message.Type.ERR))
                 Toast.makeText(this, event, Toast.LENGTH_LONG).show()
             }
@@ -203,34 +220,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshPorts() {
-        val usbManager = getSystemService(USB_SERVICE) as UsbManager
-        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
-        availablePorts.clear()
-        val portNames = mutableListOf<String>()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val usbManager = getSystemService(USB_SERVICE) as UsbManager
+            val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+            val newAvailablePorts = mutableListOf<UsbSerialPort>()
+            val portNames = mutableListOf<String>()
 
-        for (driver in drivers) {
-            val device = driver.device
-            for (port in driver.ports) {
-                availablePorts.add(port)
-                portNames.add("${device.productName ?: "USB Device"} (${port.portNumber})")
+            for (driver in drivers) {
+                val device = driver.device
+                for (port in driver.ports) {
+                    newAvailablePorts.add(port)
+                    portNames.add("${device.productName ?: "USB Device"} (${port.portNumber})")
+                }
             }
-        }
 
-        val portAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, portNames)
-        portAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.portSpinner.adapter = portAdapter
+            withContext(Dispatchers.Main) {
+                availablePorts.clear()
+                availablePorts.addAll(newAvailablePorts)
+                val portAdapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, portNames)
+                portAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+                binding.portSpinner.adapter = portAdapter
 
-        if (portNames.isEmpty()) {
-            Toast.makeText(this, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
+                if (portNames.isEmpty()) {
+                    Toast.makeText(this@MainActivity, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
     private fun connectSerial() {
         if (availablePorts.isEmpty()) {
             refreshPorts()
-            if (availablePorts.isEmpty()) return
+            return
         }
 
+        binding.connectButton.isEnabled = false
         val port = availablePorts[binding.portSpinner.selectedItemPosition]
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
         
