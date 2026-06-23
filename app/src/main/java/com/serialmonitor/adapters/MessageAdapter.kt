@@ -39,7 +39,7 @@ class MessageAdapter(private val messages: MutableList<Message>) :
             Message.Type.ERR -> com.serialmonitor.R.color.terminal_err
         }
 
-        holder.binding.root.text = displayContent
+        holder.binding.root.text = displayContent.trimEnd('\n', '\r')
         holder.binding.root.setTextColor(androidx.core.content.ContextCompat.getColor(context, colorRes))
     }
 

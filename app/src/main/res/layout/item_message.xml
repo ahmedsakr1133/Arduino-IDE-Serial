@@ -5,6 +5,7 @@
     android:layout_height="wrap_content"
     android:fontFamily="monospace"
     android:gravity="left"
+    android:minLines="1"
     android:textAlignment="gravity"
     android:textDirection="ltr"
     android:paddingHorizontal="8dp"
