@@ -118,7 +118,7 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_settings -> {
-                showSettingsDialog()
+                startActivity(Intent(this, SettingsActivity::class.java))
                 true
             }
             R.id.action_clear -> {
@@ -132,84 +132,52 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSettingsDialog() {
-        val dialogBinding = DialogSettingsBinding.inflate(layoutInflater)
-        
-        val baudAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, baudRates)
-        baudAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        dialogBinding.baudSpinner.adapter = baudAdapter
-        dialogBinding.baudSpinner.setSelection(baudRates.indexOf(baudRate).coerceAtLeast(0))
+    override fun onResume() {
+        super.onResume()
+        loadSettings()
+    }
 
-        val dataBitsValues = listOf(5, 6, 7, 8)
-        val dataBitsAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, dataBitsValues)
-        dialogBinding.dataBitsSpinner.adapter = dataBitsAdapter
-        dialogBinding.dataBitsSpinner.setSelection(dataBitsValues.indexOf(when(dataBits) {
-            UsbSerialPort.DATABITS_5 -> 5
-            UsbSerialPort.DATABITS_6 -> 6
-            UsbSerialPort.DATABITS_7 -> 7
-            else -> 8
-        }))
+    private fun loadSettings() {
+        val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+        baudRate = prefs.getInt("baud_rate", 115200)
+        dataBits = prefs.getInt("data_bits", UsbSerialPort.DATABITS_8)
+        stopBits = prefs.getInt("stop_bits", UsbSerialPort.STOPBITS_1)
+        parity = prefs.getInt("parity", UsbSerialPort.PARITY_NONE)
+        lineEnding = prefs.getInt("line_ending", 3)
+    }
 
-        val stopBitsValues = listOf("1", "1.5", "2")
-        val stopBitsAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, stopBitsValues)
-        dialogBinding.stopBitsSpinner.adapter = stopBitsAdapter
-        dialogBinding.stopBitsSpinner.setSelection(when(stopBits) {
-            UsbSerialPort.STOPBITS_1_5 -> 1
-            UsbSerialPort.STOPBITS_2 -> 2
-            else -> 0
-        })
+    private fun showPortSelectionDialog() {
+        val usbManager = getSystemService(USB_SERVICE) as UsbManager
+        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        val tempPorts = mutableListOf<UsbSerialPort>()
+        val portNames = mutableListOf<String>()
 
-        val parityOptions = listOf(getString(R.string.none), getString(R.string.odd), getString(R.string.even), getString(R.string.mark), getString(R.string.space))
-        val parityAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, parityOptions)
-        dialogBinding.paritySpinner.adapter = parityAdapter
-        dialogBinding.paritySpinner.setSelection(when(parity) {
-            UsbSerialPort.PARITY_ODD -> 1
-            UsbSerialPort.PARITY_EVEN -> 2
-            UsbSerialPort.PARITY_MARK -> 3
-            UsbSerialPort.PARITY_SPACE -> 4
-            else -> 0
-        })
-
-        val lineEndingOptions = listOf(getString(R.string.none), getString(R.string.nl), getString(R.string.cr), getString(R.string.both))
-        val lineEndingAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, lineEndingOptions)
-        dialogBinding.lineEndingSpinner.adapter = lineEndingAdapter
-        dialogBinding.lineEndingSpinner.setSelection(lineEnding)
-
-        refreshPortsInDialog(dialogBinding)
-
-        AlertDialog.Builder(this)
-            .setTitle(R.string.settings)
-            .setView(dialogBinding.root)
-            .setPositiveButton(R.string.connect) { _, _ ->
-                baudRate = baudRates[dialogBinding.baudSpinner.selectedItemPosition]
-                dataBits = when(dialogBinding.dataBitsSpinner.selectedItemPosition) {
-                    0 -> UsbSerialPort.DATABITS_5
-                    1 -> UsbSerialPort.DATABITS_6
-                    2 -> UsbSerialPort.DATABITS_7
-                    else -> UsbSerialPort.DATABITS_8
-                }
-                stopBits = when(dialogBinding.stopBitsSpinner.selectedItemPosition) {
-                    1 -> UsbSerialPort.STOPBITS_1_5
-                    2 -> UsbSerialPort.STOPBITS_2
-                    else -> UsbSerialPort.STOPBITS_1
-                }
-                parity = when(dialogBinding.paritySpinner.selectedItemPosition) {
-                    1 -> UsbSerialPort.PARITY_ODD
-                    2 -> UsbSerialPort.PARITY_EVEN
-                    3 -> UsbSerialPort.PARITY_MARK
-                    4 -> UsbSerialPort.PARITY_SPACE
-                    else -> UsbSerialPort.PARITY_NONE
-                }
-                lineEnding = dialogBinding.lineEndingSpinner.selectedItemPosition
-                
-                if (dialogBinding.portSpinner.adapter != null && dialogBinding.portSpinner.adapter.count > 0) {
-                    connectSerial(dialogBinding.portSpinner.selectedItemPosition)
-                } else {
-                    Toast.makeText(this, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
-                }
+        for (driver in drivers) {
+            for (port in driver.ports) {
+                tempPorts.add(port)
+                portNames.add("${driver.device.productName ?: "USB Device"} (${port.portNumber})")
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        }
+
+        if (tempPorts.isEmpty()) {
+            Toast.makeText(this, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        availablePorts.clear()
+        availablePorts.addAll(tempPorts)
+
+        if (availablePorts.size == 1) {
+            connectSerial(0)
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle(R.string.connect)
+                .setItems(portNames.toTypedArray()) { _, which ->
+                    connectSerial(which)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
     }
 
     private fun refreshPortsInDialog(dialogBinding: DialogSettingsBinding) {
@@ -241,7 +209,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleUsbIntent(intent: Intent?) {
         if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             refreshPorts()
-            showSettingsDialog()
+            showPortSelectionDialog()
         }
     }
 
@@ -254,9 +222,11 @@ class MainActivity : AppCompatActivity() {
             adapter = messageAdapter
         }
 
-        binding.connectButton.setOnClickListener { showSettingsDialog() }
+        binding.connectButton.setOnClickListener { showPortSelectionDialog() }
         binding.disconnectButton.setOnClickListener { disconnectSerial() }
-        binding.settingsButton.setOnClickListener { showSettingsDialog() }
+        binding.settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
         binding.clearButton.setOnClickListener {
             messageAdapter.clear()
             totalRx = 0

@@ -1,7 +1,7 @@
 package com.serialmonitor
 
 data class Message(
-    val content: String,
+    var content: String,
     val type: Type,
     val timestamp: String = SerialHelper.formatTimestamp()
 ) {

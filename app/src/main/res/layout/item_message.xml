@@ -10,7 +10,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:fontFamily="monospace"
-        android:lineSpacingExtra="4dp"
-        android:text="12:30:01 [RX] Hello World"
-        android:textSize="13sp" />
+        android:gravity="left"
+        android:textAlignment="viewStart"
+        android:textDirection="ltr"
+        android:lineSpacingExtra="2dp"
+        android:paddingHorizontal="4dp"
+        android:textSize="12sp" />
 </LinearLayout>

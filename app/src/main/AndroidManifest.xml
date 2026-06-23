@@ -17,6 +17,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.SerialMonitor">
         <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SerialMonitor" />
+        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
