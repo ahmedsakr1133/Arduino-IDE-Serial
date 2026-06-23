@@ -79,19 +79,51 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
                     val client = serverSocket?.accept() ?: break
                     launch {
                         try {
-                            val reader = client.getInputStream().bufferedReader()
-                            val firstLine = reader.readLine()
-                            if (firstLine != null && firstLine.contains("GET /send?cmd=")) {
-                                val cmd = firstLine.substringAfter("cmd=").substringBefore(" ")
-                                val decodedCmd = java.net.URLDecoder.decode(cmd, "UTF-8")
-                                write(decodedCmd.toByteArray())
-                                emitEvent("SERVER_CMD:$decodedCmd")
-                                
-                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK: $decodedCmd"
-                                client.getOutputStream().write(response.toByteArray())
-                            } else {
-                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nSerial Monitor Server Running"
-                                client.getOutputStream().write(response.toByteArray())
+                            val inputStream = client.getInputStream()
+                            val outputStream = client.getOutputStream()
+                            val buffer = ByteArray(1024)
+                            val bytesRead = inputStream.read(buffer)
+                            
+                            if (bytesRead > 0) {
+                                val received = String(buffer, 0, bytesRead)
+                                if (received.startsWith("GET /send?cmd=")) {
+                                    // Handle HTTP GET
+                                    val cmd = received.substringAfter("cmd=").substringBefore(" ")
+                                    val decodedCmd = java.net.URLDecoder.decode(cmd, "UTF-8")
+                                    
+                                    val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+                                    val lineEnding = prefs.getInt("line_ending", 3)
+                                    val suffix = when(lineEnding) {
+                                        1 -> "\n"
+                                        2 -> "\r"
+                                        3 -> "\r\n"
+                                        else -> ""
+                                    }
+                                    
+                                    val dataToSend = (decodedCmd + suffix).toByteArray()
+                                    if (usbSerialPort != null) {
+                                        write(dataToSend)
+                                        emitEvent("SERVER_CMD:$decodedCmd")
+                                    } else {
+                                        emitEvent("SERVER_ERROR: Serial not connected (Cmd: $decodedCmd)")
+                                    }
+                                    
+                                    val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK: $decodedCmd"
+                                    outputStream.write(response.toByteArray())
+                                } else if (received.startsWith("GET /")) {
+                                    // Basic HTTP response for other paths
+                                    val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nSerial Monitor Server Running\nUse /send?cmd=YOUR_COMMAND"
+                                    outputStream.write(response.toByteArray())
+                                } else {
+                                    // Handle raw TCP data
+                                    val decodedCmd = received.trimEnd('\n', '\r')
+                                    if (usbSerialPort != null) {
+                                        write(buffer.copyOfRange(0, bytesRead))
+                                        emitEvent("SERVER_CMD:$decodedCmd")
+                                    } else {
+                                        emitEvent("SERVER_ERROR: Serial not connected")
+                                    }
+                                }
                             }
                         } catch (e: Exception) {
                             // Ignore client errors

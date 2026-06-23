@@ -453,9 +453,20 @@ class MainActivity : AppCompatActivity() {
                 }
                 event.startsWith("SERVER_CMD") -> {
                     val cmd = event.substringAfter(":")
-                    messageAdapter.addMessage(Message("SERVER CMD: $cmd", Message.Type.TX))
-                    totalTx += cmd.length
+                    messageAdapter.addMessage(Message("[SERVER] $cmd", Message.Type.TX))
+                    // Approximate TX count update
+                    val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+                    val lineEnding = prefs.getInt("line_ending", 3)
+                    val suffixLen = when(lineEnding) {
+                        1, 2 -> 1
+                        3 -> 2
+                        else -> 0
+                    }
+                    totalTx += (cmd.length + suffixLen)
                     updateStatsUI()
+                    if (binding.autoScrollCheck.isChecked) {
+                        binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
+                    }
                 }
                 event.startsWith("ERROR") -> {
                     binding.connectionSwitch.isChecked = false
