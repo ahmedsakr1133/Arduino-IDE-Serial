@@ -28,12 +28,8 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 10)
     val events = _events.asSharedFlow()
 
-    private val _messagesFlow = MutableSharedFlow<Message>(extraBufferCapacity = 500)
+    private val _messagesFlow = MutableSharedFlow<Message>(extraBufferCapacity = 100)
     val messagesFlow = _messagesFlow.asSharedFlow()
-
-    private val rxBuffer = StringBuilder()
-    private var lastRxEmitTime = 0L
-    private val ansiRegex = Regex("\u001B\\[[;\\d]*m")
 
     private val _messages = mutableListOf<Message>()
     fun getMessageHistory(): List<Message> = synchronized(_messages) { _messages.toList() }
@@ -50,16 +46,18 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
         val msg = Message(content, type)
         synchronized(_messages) {
             _messages.add(msg)
-            if (_messages.size > 2000) { // Increased history limit
+            if (_messages.size > 1000) { // Limit history
                 _messages.removeAt(0)
             }
         }
-        _messagesFlow.tryEmit(msg)
+        serviceScope.launch(Dispatchers.Main) {
+            _messagesFlow.emit(msg)
+        }
     }
 
     fun isSerialConnected() = usbSerialPort != null
-    fun isServerRunning() = localServer?.wasStarted() == true && localServer?.isAlive == true
-    fun getServerPort() = localServer?.listeningPort ?: 0
+    fun isServerRunning() = serverSocket != null && !serverSocket!!.isClosed
+    fun getServerPort() = serverSocket?.localPort ?: 0
 
     inner class SerialBinder : Binder() {
         fun getService(): SerialService = this@SerialService
@@ -99,47 +97,93 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var localServer: LocalServer? = null
+    private var serverSocket: java.net.ServerSocket? = null
+    private var serverJob: Job? = null
 
     fun startServer(port: Int) {
-        if (isServerRunning() && getServerPort() == port) return
-
-        stopServer(silent = true)
-        try {
-            localServer = LocalServer(port) { cmd ->
-                handleServerCommand(cmd)
+        serverJob?.cancel()
+        serverJob = serviceScope.launch {
+            try {
+                serverSocket = java.net.ServerSocket(port)
+                val ip = SerialHelper.getLocalIpAddress(this@SerialService)
+                addMessage(getString(R.string.server_active, "$ip:$port"), Message.Type.SYS)
+                emitEvent("SERVER_STARTED:$port")
+                while (isActive) {
+                    val client = serverSocket?.accept() ?: break
+                    launch {
+                        try {
+                            val inputStream = client.getInputStream()
+                            val outputStream = client.getOutputStream()
+                            val buffer = ByteArray(2048)
+                            var isFirstRead = true
+                            
+                            while (isActive && usbSerialPort != null) {
+                                val bytesRead = inputStream.read(buffer)
+                                if (bytesRead <= 0) break
+                                
+                                val received = String(buffer, 0, bytesRead)
+                                
+                                if (isFirstRead && received.startsWith("GET /send?cmd=")) {
+                                    // Handle HTTP GET
+                                    val cmd = received.substringAfter("cmd=").substringBefore(" ")
+                                    val decodedCmd = java.net.URLDecoder.decode(cmd, "UTF-8")
+                                    
+                                    val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+                                    val lineEnding = prefs.getInt("line_ending", 3)
+                                    val suffix = when(lineEnding) {
+                                        1 -> "\n"
+                                        2 -> "\r"
+                                        3 -> "\r\n"
+                                        else -> ""
+                                    }
+                                    
+                                    val dataToSend = (decodedCmd + suffix).toByteArray()
+                                    write(dataToSend)
+                                    addMessage("[SERVER] $decodedCmd", Message.Type.TX)
+                                    emitEvent("SERVER_CMD:$decodedCmd")
+                                    
+                                    val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK: $decodedCmd"
+                                    outputStream.write(response.toByteArray())
+                                    break // HTTP usually closes after one response
+                                } else if (isFirstRead && received.startsWith("GET /")) {
+                                    val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nSerial Monitor Server Running\nUse /send?cmd=YOUR_COMMAND"
+                                    outputStream.write(response.toByteArray())
+                                    break
+                                } else {
+                                    // Handle raw TCP data
+                                    val data = buffer.copyOfRange(0, bytesRead)
+                                    write(data)
+                                    
+                                    val displayStr = received.trimEnd('\n', '\r')
+                                    if (displayStr.isNotEmpty()) {
+                                        addMessage("[SERVER] $displayStr", Message.Type.TX)
+                                        emitEvent("SERVER_CMD:$displayStr")
+                                    }
+                                }
+                                isFirstRead = false
+                            }
+                        } catch (e: Exception) {
+                            // Client disconnected or error
+                        } finally {
+                            try { client.close() } catch (ignored: Exception) {}
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (isActive) {
+                    emitEvent("SERVER_ERROR: ${e.message}")
+                }
             }
-            localServer?.start()
-            val ip = SerialHelper.getLocalIpAddress(this@SerialService)
-            addMessage(getString(R.string.server_active, "$ip:$port"), Message.Type.SYS)
-            emitEvent("SERVER_STARTED:$port")
-        } catch (e: Exception) {
-            emitEvent("SERVER_ERROR: ${e.message}")
         }
     }
 
-    private fun handleServerCommand(command: String) {
-        val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
-        val lineEnding = prefs.getInt("line_ending", 3)
-        val suffix = when (lineEnding) {
-            1 -> "\n"
-            2 -> "\r"
-            3 -> "\r\n"
-            else -> ""
-        }
-        val dataToSend = (command + suffix).toByteArray()
-        write(dataToSend)
-        addMessage("[SERVER] $command", Message.Type.TX)
-        emitEvent("SERVER_CMD:$command")
-    }
-
-    fun stopServer(silent: Boolean = false) {
-        localServer?.stop()
-        localServer = null
-        if (!silent) {
-            addMessage(getString(R.string.server_stopped), Message.Type.SYS)
-            emitEvent("SERVER_STOPPED")
-        }
+    fun stopServer() {
+        serverJob?.cancel()
+        serverJob = null
+        try { serverSocket?.close() } catch (ignored: Exception) {}
+        serverSocket = null
+        addMessage(getString(R.string.server_stopped), Message.Type.SYS)
+        emitEvent("SERVER_STOPPED")
     }
 
     fun connect(port: UsbSerialPort, baudRate: Int, dataBits: Int, stopBits: Int, parity: Int) {
@@ -172,7 +216,6 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
 
     fun disconnect() {
         serviceScope.launch {
-            synchronized(rxBuffer) { rxBuffer.setLength(0) }
             ioManager?.stop()
             ioManager = null
             try { usbSerialPort?.close() } catch (ignored: Exception) {}
@@ -203,37 +246,9 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     }
 
     override fun onNewData(data: ByteArray) {
+        val text = String(data)
+        addMessage(text, Message.Type.RX)
         _dataBytes.tryEmit(data)
-        
-        val text = String(data, Charsets.UTF_8)
-        val filtered = ansiRegex.replace(text, "")
-        
-        synchronized(rxBuffer) {
-            rxBuffer.append(filtered)
-        }
-        
-        val now = System.currentTimeMillis()
-        if (now - lastRxEmitTime > 200 || filtered.contains('\n') || filtered.contains('\r')) {
-            emitBufferedRx()
-            lastRxEmitTime = now
-        }
-    }
-
-    private fun emitBufferedRx() {
-        val content: String
-        synchronized(rxBuffer) {
-            content = rxBuffer.toString()
-            rxBuffer.setLength(0)
-        }
-        if (content.isEmpty()) return
-        
-        val lines = content.replace("\r\n", "\n").replace("\r", "\n")
-            .split(Regex("(?<=\n)"))
-            .filter { it.isNotEmpty() }
-            
-        lines.forEach { line ->
-            addMessage(line, Message.Type.RX)
-        }
     }
 
     override fun onRunError(e: Exception) {

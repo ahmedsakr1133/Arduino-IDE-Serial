@@ -306,8 +306,7 @@ class MainActivity : AppCompatActivity() {
             updateStatsUI()
         }
 
-        binding.connectionSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
-            if (!buttonView.isPressed) return@setOnCheckedChangeListener
+        binding.connectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 if (serialService?.isSerialConnected() == false) {
                     showPortSelectionDialog()
@@ -337,8 +336,7 @@ class MainActivity : AppCompatActivity() {
             if (isChecked) startAutoSend() else stopAutoSend()
         }
 
-        binding.serverSwitch.setOnCheckedChangeListener { buttonView, isChecked ->
-            if (!buttonView.isPressed) return@setOnCheckedChangeListener
+        binding.serverSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 if (serialService?.isServerRunning() == false) {
                     serialService?.startServer(serverPort)
