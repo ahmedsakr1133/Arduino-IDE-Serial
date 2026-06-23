@@ -122,9 +122,15 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
                             if (bytesRead <= 0) return@launch
                             
                             val received = String(buffer, 0, bytesRead)
+                            val requestLine = received.substringBefore("\r\n").substringBefore("\n")
+                            val parts = requestLine.split(" ")
+                            val method = parts.getOrNull(0) ?: ""
+                            val fullPath = parts.getOrNull(1) ?: ""
+                            val path = fullPath.substringBefore("?")
+                            val queryString = fullPath.substringAfter("?", "")
                             
-                            if (received.startsWith("GET /send?cmd=")) {
-                                val cmd = received.substringAfter("cmd=").substringBefore(" ")
+                            if (method == "GET" && path == "/send" && queryString.startsWith("cmd=")) {
+                                val cmd = queryString.removePrefix("cmd=")
                                 val decodedCmd = java.net.URLDecoder.decode(cmd, "UTF-8")
                                 
                                 if (usbSerialPort != null) {
@@ -146,9 +152,23 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
                                 
                                 val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK: $decodedCmd"
                                 outputStream.write(response.toByteArray())
-                            } else if (received.startsWith("GET /")) {
+                            } else if (method == "GET" && path == "/" && queryString.isNotEmpty()) {
+                                val decodedQuery = java.net.URLDecoder.decode(queryString, "UTF-8")
+                                
+                                if (usbSerialPort != null) {
+                                    val dataToSend = (decodedQuery + "\r\n").toByteArray()
+                                    write(dataToSend)
+                                    addMessage("[SERVER] IR: $decodedQuery", Message.Type.TX)
+                                    emitEvent("SERVER_CMD:$decodedQuery")
+                                } else {
+                                    addMessage("[SERVER] IR command ignored (serial disconnected)", Message.Type.ERR)
+                                }
+                                
+                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK"
+                                outputStream.write(response.toByteArray())
+                            } else if (method == "GET" && path == "/") {
                                 val status = if (usbSerialPort != null) "Connected" else "Disconnected"
-                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nSerial Monitor Server Running\nSerial: $status\nUse /send?cmd=YOUR_COMMAND"
+                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nSerial Monitor Server Running\nSerial: $status\nUse /send?cmd=YOUR_COMMAND or /?carrier=...&code=..."
                                 outputStream.write(response.toByteArray())
                             } else {
                                 if (usbSerialPort != null) {

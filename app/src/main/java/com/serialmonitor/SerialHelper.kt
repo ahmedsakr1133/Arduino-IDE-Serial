@@ -39,16 +39,25 @@ object SerialHelper {
 
         try {
             val en = java.net.NetworkInterface.getNetworkInterfaces()
+            var bestIp = "Unknown"
             while (en.hasMoreElements()) {
                 val intf = en.nextElement()
+                if (!intf.isUp || intf.isLoopback) continue
                 val enumIpAddr = intf.inetAddresses
                 while (enumIpAddr.hasMoreElements()) {
                     val inetAddress = enumIpAddr.nextElement()
-                    if (!inetAddress.isLoopbackAddress && inetAddress is java.net.Inet4Address) {
+                    if (inetAddress.isLoopbackAddress || inetAddress !is java.net.Inet4Address) continue
+                    val name = intf.name.lowercase()
+                    // Prefer wlan/wifi over other interfaces (vpn, tether, etc.)
+                    if (name.contains("wlan") || name.contains("wifi") || name.contains("eth")) {
                         return inetAddress.hostAddress ?: "Unknown"
+                    }
+                    if (bestIp == "Unknown") {
+                        bestIp = inetAddress.hostAddress ?: "Unknown"
                     }
                 }
             }
+            return bestIp
         } catch (ex: Exception) {
             ex.printStackTrace()
         }
