@@ -31,4 +31,27 @@ object SerialHelper {
         if (cleanHex.length % 2 != 0) return false
         return cleanHex.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
     }
+
+    fun getLocalIpAddress(context: android.content.Context): String {
+        val prefs = context.getSharedPreferences("serial_settings", android.content.Context.MODE_PRIVATE)
+        val manualIp = prefs.getString("manual_ip", "") ?: ""
+        if (manualIp.isNotEmpty()) return manualIp
+
+        try {
+            val en = java.net.NetworkInterface.getNetworkInterfaces()
+            while (en.hasMoreElements()) {
+                val intf = en.nextElement()
+                val enumIpAddr = intf.inetAddresses
+                while (enumIpAddr.hasMoreElements()) {
+                    val inetAddress = enumIpAddr.nextElement()
+                    if (!inetAddress.isLoopbackAddress && inetAddress is java.net.Inet4Address) {
+                        return inetAddress.hostAddress ?: "Unknown"
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+        }
+        return "Unknown"
+    }
 }

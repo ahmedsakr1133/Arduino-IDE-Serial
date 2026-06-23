@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity() {
             val binder = service as SerialService.SerialBinder
             serialService = binder.getService()
             isBound = true
+            syncServiceState()
             observeService()
         }
 
@@ -147,6 +148,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.action_clear -> {
+                serialService?.clearMessageHistory()
                 messageAdapter.clear()
                 totalRx = 0
                 totalTx = 0
@@ -161,9 +163,51 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         loadSettings()
         
-        // Update switch colors based on current state
-        updateSwitchColors(binding.connectionSwitch, binding.connectionSwitch.isChecked)
-        updateSwitchColors(binding.serverSwitch, binding.serverSwitch.isChecked)
+        if (isBound) {
+            syncServiceState()
+        } else {
+            // Update switch colors based on current checkbox state if not bound yet
+            updateSwitchColors(binding.connectionSwitch, binding.connectionSwitch.isChecked)
+            updateSwitchColors(binding.serverSwitch, binding.serverSwitch.isChecked)
+        }
+    }
+
+    private fun syncServiceState() {
+        val service = serialService ?: return
+        
+        val isSerialConnected = service.isSerialConnected()
+        binding.connectionSwitch.isChecked = isSerialConnected
+        updateSwitchColors(binding.connectionSwitch, isSerialConnected)
+        if (isSerialConnected) {
+            binding.connectionStatus.text = getString(R.string.connected)
+            binding.connectionStatus.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.terminal_rx))
+        } else {
+            binding.connectionStatus.text = getString(R.string.disconnected)
+            binding.connectionStatus.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.terminal_err))
+        }
+
+        val isServerRunning = service.isServerRunning()
+        binding.serverSwitch.isChecked = isServerRunning
+        updateSwitchColors(binding.serverSwitch, isServerRunning)
+        if (isServerRunning) {
+            val port = service.getServerPort()
+            val ip = getLocalIpAddress()
+            currentServerAddress = "http://$ip:$port"
+            binding.copyServerAddress.visibility = View.VISIBLE
+        } else {
+            binding.copyServerAddress.visibility = View.GONE
+            currentServerAddress = ""
+        }
+
+        // Load message history
+        val history = service.getMessageHistory()
+        if (history.isNotEmpty()) {
+            messageAdapter.clear()
+            messageAdapter.addMessages(history)
+            if (binding.autoScrollCheck.isChecked) {
+                binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
+            }
+        }
     }
 
     private fun loadSettings() {
@@ -264,9 +308,13 @@ class MainActivity : AppCompatActivity() {
 
         binding.connectionSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                showPortSelectionDialog()
+                if (serialService?.isSerialConnected() == false) {
+                    showPortSelectionDialog()
+                }
             } else {
-                disconnectSerial()
+                if (serialService?.isSerialConnected() == true) {
+                    disconnectSerial()
+                }
             }
             updateSwitchColors(binding.connectionSwitch, isChecked)
         }
@@ -290,10 +338,14 @@ class MainActivity : AppCompatActivity() {
 
         binding.serverSwitch.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                serialService?.startServer(serverPort)
+                if (serialService?.isServerRunning() == false) {
+                    serialService?.startServer(serverPort)
+                }
             } else {
-                serialService?.stopServer()
-                binding.copyServerAddress.visibility = View.GONE
+                if (serialService?.isServerRunning() == true) {
+                    serialService?.stopServer()
+                    binding.copyServerAddress.visibility = View.GONE
+                }
             }
             updateSwitchColors(binding.serverSwitch, isChecked)
         }
@@ -346,37 +398,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeService() {
         lifecycleScope.launch {
-            val rxBuffer = StringBuilder()
-            var lastUpdate = System.currentTimeMillis()
-
-            serialService?.dataBytes?.collect { data ->
-                val text = String(data, Charsets.UTF_8)
-                val filteredText = ansiRegex.replace(text, "")
-                rxBuffer.append(filteredText)
-                totalRx += data.size
-
-                val now = System.currentTimeMillis()
-                if (rxBuffer.contains("\n") || rxBuffer.contains("\r") || rxBuffer.length > 1024 || (rxBuffer.isNotEmpty() && now - lastUpdate > 300)) {
-                    val content = rxBuffer.toString()
-                    rxBuffer.setLength(0)
-                    lastUpdate = now
-                    
-                    val lines = content.replace("\r\n", "\n").replace("\r", "\n")
-                        .split(Regex("(?<=\n)"))
-                        .filter { it.isNotEmpty() }
-                        .map { Message(it, Message.Type.RX) }
-
-                    if (lines.isNotEmpty()) {
-                        withContext(Dispatchers.Main) {
-                            messageAdapter.addMessages(lines)
-                            if (binding.autoScrollCheck.isChecked) {
-                                binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
-                            }
-                            updateStatsUI()
-                        }
-                    } else {
-                        withContext(Dispatchers.Main) { updateStatsUI() }
+            serialService?.messagesFlow?.collect { msg ->
+                withContext(Dispatchers.Main) {
+                    messageAdapter.addMessage(msg)
+                    if (binding.autoScrollCheck.isChecked) {
+                        binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
                     }
+                    // Update stats based on message type
+                    when (msg.type) {
+                        Message.Type.RX -> totalRx += msg.content.length
+                        Message.Type.TX -> totalTx += msg.content.length
+                        else -> {}
+                    }
+                    updateStatsUI()
                 }
             }
         }
@@ -394,26 +428,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getLocalIpAddress(): String {
-        val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
-        val manualIp = prefs.getString("manual_ip", "") ?: ""
-        if (manualIp.isNotEmpty()) return manualIp
-
-        try {
-            val en = java.net.NetworkInterface.getNetworkInterfaces()
-            while (en.hasMoreElements()) {
-                val intf = en.nextElement()
-                val enumIpAddr = intf.inetAddresses
-                while (enumIpAddr.hasMoreElements()) {
-                    val inetAddress = enumIpAddr.nextElement()
-                    if (!inetAddress.isLoopbackAddress && inetAddress is java.net.Inet4Address) {
-                        return inetAddress.hostAddress ?: "Unknown"
-                    }
-                }
-            }
-        } catch (ex: Exception) {
-            ex.printStackTrace()
-        }
-        return "Unknown"
+        return SerialHelper.getLocalIpAddress(this)
     }
 
     private fun handleEvent(event: String) {
@@ -424,7 +439,6 @@ class MainActivity : AppCompatActivity() {
                     binding.connectionStatus.setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.terminal_rx))
                     binding.connectionSwitch.isChecked = true
                     updateSwitchColors(binding.connectionSwitch, true)
-                    messageAdapter.addMessage(Message(getString(R.string.connected), Message.Type.SYS))
                     Toast.makeText(this@MainActivity, R.string.successfully_connected, Toast.LENGTH_SHORT).show()
                 }
                 event == "DISCONNECTED" -> {
@@ -432,41 +446,29 @@ class MainActivity : AppCompatActivity() {
                     binding.connectionStatus.setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.terminal_err))
                     binding.connectionSwitch.isChecked = false
                     updateSwitchColors(binding.connectionSwitch, false)
-                    messageAdapter.addMessage(Message(getString(R.string.disconnected), Message.Type.SYS))
                 }
                 event.startsWith("SERVER_STARTED") -> {
                     val port = event.substringAfter(":")
                     val ip = getLocalIpAddress()
                     currentServerAddress = "http://$ip:$port"
-                    val msg = getString(R.string.server_active, "$ip:$port")
-                    messageAdapter.addMessage(Message(msg, Message.Type.SYS))
                     binding.serverSwitch.isChecked = true
                     updateSwitchColors(binding.serverSwitch, true)
                     binding.copyServerAddress.visibility = View.VISIBLE
                 }
                 event == "SERVER_STOPPED" -> {
-                    messageAdapter.addMessage(Message(getString(R.string.server_stopped), Message.Type.SYS))
                     binding.serverSwitch.isChecked = false
                     updateSwitchColors(binding.serverSwitch, false)
                     binding.copyServerAddress.visibility = View.GONE
                     currentServerAddress = ""
                 }
-                event.startsWith("SERVER_CMD") -> {
-                    val cmd = event.substringAfter(":")
-                    messageAdapter.addMessage(Message("[SERVER] $cmd", Message.Type.TX))
-                    // Approximate TX count update
-                    val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
-                    val lineEnding = prefs.getInt("line_ending", 3)
-                    val suffixLen = when(lineEnding) {
-                        1, 2 -> 1
-                        3 -> 2
-                        else -> 0
-                    }
-                    totalTx += (cmd.length + suffixLen)
+                event == "HISTORY_CLEARED" -> {
+                    messageAdapter.clear()
+                    totalRx = 0
+                    totalTx = 0
                     updateStatsUI()
-                    if (binding.autoScrollCheck.isChecked) {
-                        binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
-                    }
+                }
+                event.startsWith("SERVER_CMD") -> {
+                    // Handled by messagesFlow
                 }
                 event.startsWith("ERROR") -> {
                     binding.connectionSwitch.isChecked = false
@@ -552,12 +554,8 @@ class MainActivity : AppCompatActivity() {
         }
         val data = (text + suffix).toByteArray()
         serialService?.write(data)
+        serialService?.addManualMessage(text, Message.Type.TX)
         
-        messageAdapter.addMessage(Message(text, Message.Type.TX))
-        if (binding.autoScrollCheck.isChecked) {
-            binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
-        }
-
         if (commandHistory.isEmpty() || commandHistory.last() != text) {
             commandHistory.add(text)
             if (commandHistory.size > 20) commandHistory.removeAt(0)
@@ -565,8 +563,6 @@ class MainActivity : AppCompatActivity() {
         historyIndex = commandHistory.size
         
         binding.commandInput.text.clear()
-        totalTx += data.size
-        updateStatsUI()
     }
 
     private fun navigateHistory(prev: Boolean) {
