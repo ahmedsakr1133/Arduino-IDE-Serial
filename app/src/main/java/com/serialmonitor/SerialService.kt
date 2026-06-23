@@ -100,32 +100,6 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     private var serverSocket: java.net.ServerSocket? = null
     private var serverJob: Job? = null
 
-    private fun updateNotification(content: String) {
-        try {
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle(getString(R.string.app_name))
-                .setContentText(content)
-                .setSmallIcon(R.drawable.ic_serial_notification)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setOngoing(true)
-                .build()
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.notify(NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun checkShouldStopService() {
-        serviceScope.launch(Dispatchers.Main) {
-            // Only stop if both features are off
-            if (usbSerialPort == null && serverSocket == null) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                // We keep the service alive while activity is bound or until explicitly stopped by OS
-            }
-        }
-    }
-
     fun startServer(port: Int) {
         serverJob?.cancel()
         serverJob = serviceScope.launch {
@@ -134,7 +108,6 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
                 val ip = SerialHelper.getLocalIpAddress(this@SerialService)
                 addMessage(getString(R.string.server_active, "$ip:$port"), Message.Type.SYS)
                 emitEvent("SERVER_STARTED:$port")
-                updateNotification("Server Active at $ip:$port")
                 while (isActive) {
                     val client = serverSocket?.accept() ?: break
                     launch {
@@ -211,10 +184,6 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
         serverSocket = null
         addMessage(getString(R.string.server_stopped), Message.Type.SYS)
         emitEvent("SERVER_STOPPED")
-        
-        val status = if (usbSerialPort != null) "Connected" else getString(R.string.disconnected)
-        updateNotification(status)
-        checkShouldStopService()
     }
 
     fun connect(port: UsbSerialPort, baudRate: Int, dataBits: Int, stopBits: Int, parity: Int) {
@@ -235,7 +204,6 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
                 ioManager?.start()
                 addMessage("Connected to ${port.driver.device.deviceName}", Message.Type.SYS)
                 emitEvent("CONNECTED")
-                updateNotification("Connected to ${port.driver.device.deviceName}")
             } catch (e: Exception) {
                 emitEvent("ERROR: ${e.message}")
                 try { port.close() } catch (ignored: Exception) {}
@@ -256,10 +224,10 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
             connection = null
             addMessage(getString(R.string.disconnected), Message.Type.SYS)
             emitEvent("DISCONNECTED")
-            
-            val status = if (isServerRunning()) "Server Running" else getString(R.string.disconnected)
-            updateNotification(status)
-            checkShouldStopService()
+            withContext(Dispatchers.Main) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
         }
     }
 
