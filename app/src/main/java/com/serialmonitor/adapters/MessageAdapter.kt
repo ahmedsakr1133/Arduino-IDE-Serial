@@ -49,9 +49,23 @@ class MessageAdapter(private val messages: MutableList<Message>) :
         messages.add(message)
         if (messages.size > 1000) {
             messages.removeAt(0)
-            notifyItemRemoved(0)
+            notifyDataSetChanged()
+        } else {
+            notifyItemInserted(messages.size - 1)
         }
-        notifyItemInserted(messages.size - 1)
+    }
+
+    fun addMessages(newMessages: List<Message>) {
+        if (newMessages.isEmpty()) return
+        val startPos = messages.size
+        messages.addAll(newMessages)
+        if (messages.size > 1000) {
+            val toRemove = messages.size - 1000
+            repeat(toRemove) { messages.removeAt(0) }
+            notifyDataSetChanged()
+        } else {
+            notifyItemRangeInserted(startPos, newMessages.size)
+        }
     }
 
     fun clear() {

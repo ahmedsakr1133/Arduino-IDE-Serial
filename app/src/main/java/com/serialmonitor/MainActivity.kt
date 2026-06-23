@@ -291,24 +291,26 @@ class MainActivity : AppCompatActivity() {
                 totalRx += data.size
 
                 val now = System.currentTimeMillis()
-                if (rxBuffer.contains("\n") || rxBuffer.contains("\r") || rxBuffer.length > 512 || (rxBuffer.isNotEmpty() && now - lastUpdate > 200)) {
+                if (rxBuffer.contains("\n") || rxBuffer.contains("\r") || rxBuffer.length > 1024 || (rxBuffer.isNotEmpty() && now - lastUpdate > 300)) {
                     val content = rxBuffer.toString()
                     rxBuffer.setLength(0)
+                    lastUpdate = now
                     
                     val lines = content.split("(?<=\n)|(?<=\r)".toRegex())
-                    
-                    lifecycleScope.launch(Dispatchers.Main) {
-                        lines.forEach { line ->
-                            if (line.isNotEmpty()) {
-                                messageAdapter.addMessage(Message(line, Message.Type.RX))
+                        .filter { it.isNotEmpty() }
+                        .map { Message(it, Message.Type.RX) }
+
+                    if (lines.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            messageAdapter.addMessages(lines)
+                            if (binding.autoScrollCheck.isChecked) {
+                                binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
                             }
+                            updateStatsUI()
                         }
-                        if (messageAdapter.itemCount > 0 && binding.autoScrollCheck.isChecked) {
-                            binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
-                        }
-                        updateStatsUI()
+                    } else {
+                        withContext(Dispatchers.Main) { updateStatsUI() }
                     }
-                    lastUpdate = now
                 }
             }
         }
