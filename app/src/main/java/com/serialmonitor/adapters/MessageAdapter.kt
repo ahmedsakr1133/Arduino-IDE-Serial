@@ -27,9 +27,9 @@ class MessageAdapter(private val messages: MutableList<Message>) :
         
         val displayContent = when (message.type) {
             Message.Type.RX -> message.content
-            Message.Type.TX -> "> ${message.content}\n"
-            Message.Type.SYS -> "[SYS] ${message.content}\n"
-            Message.Type.ERR -> "[ERR] ${message.content}\n"
+            Message.Type.TX -> "> ${message.content}"
+            Message.Type.SYS -> "[SYS] ${message.content}"
+            Message.Type.ERR -> "[ERR] ${message.content}"
         }
 
         val colorRes = when (message.type) {
@@ -46,15 +46,6 @@ class MessageAdapter(private val messages: MutableList<Message>) :
     override fun getItemCount(): Int = messages.size
 
     fun addMessage(message: Message) {
-        if (message.type == Message.Type.RX && messages.isNotEmpty()) {
-            val lastMsg = messages.last()
-            if (lastMsg.type == Message.Type.RX && !lastMsg.content.endsWith("\n") && !lastMsg.content.endsWith("\r")) {
-                lastMsg.content += message.content
-                notifyItemChanged(messages.size - 1)
-                return
-            }
-        }
-        
         messages.add(message)
         if (messages.size > 1000) {
             messages.removeAt(0)

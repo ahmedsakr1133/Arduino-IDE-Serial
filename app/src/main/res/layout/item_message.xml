@@ -11,7 +11,7 @@
         android:layout_height="wrap_content"
         android:fontFamily="monospace"
         android:gravity="left"
-        android:textAlignment="viewStart"
+        android:textAlignment="gravity"
         android:textDirection="ltr"
         android:lineSpacingExtra="2dp"
         android:paddingHorizontal="4dp"

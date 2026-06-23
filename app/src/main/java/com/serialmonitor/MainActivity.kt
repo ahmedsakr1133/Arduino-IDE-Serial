@@ -281,19 +281,33 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeService() {
         lifecycleScope.launch {
-            val stringBuffer = StringBuilder()
+            val rxBuffer = StringBuilder()
             var lastUpdate = System.currentTimeMillis()
 
             serialService?.dataBytes?.collect { data ->
-                val text = String(data)
+                val text = String(data, Charsets.UTF_8)
                 val filteredText = ansiRegex.replace(text, "")
-                
-                stringBuffer.append(filteredText)
+                rxBuffer.append(filteredText)
                 totalRx += data.size
-                
+
                 val now = System.currentTimeMillis()
-                if (now - lastUpdate > 100 || stringBuffer.length > 2000) {
-                    flushBuffer(stringBuffer)
+                if (rxBuffer.contains("\n") || rxBuffer.contains("\r") || rxBuffer.length > 512 || (rxBuffer.isNotEmpty() && now - lastUpdate > 200)) {
+                    val content = rxBuffer.toString()
+                    rxBuffer.setLength(0)
+                    
+                    val lines = content.split("(?<=\n)|(?<=\r)".toRegex())
+                    
+                    lifecycleScope.launch(Dispatchers.Main) {
+                        lines.forEach { line ->
+                            if (line.isNotEmpty()) {
+                                messageAdapter.addMessage(Message(line, Message.Type.RX))
+                            }
+                        }
+                        if (messageAdapter.itemCount > 0 && binding.autoScrollCheck.isChecked) {
+                            binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
+                        }
+                        updateStatsUI()
+                    }
                     lastUpdate = now
                 }
             }
@@ -303,23 +317,6 @@ class MainActivity : AppCompatActivity() {
             serialService?.events?.collect { event ->
                 handleEvent(event)
             }
-        }
-    }
-
-    private fun flushBuffer(buffer: StringBuilder) {
-        if (buffer.isEmpty()) {
-            lifecycleScope.launch(Dispatchers.Main) { updateStatsUI() }
-            return
-        }
-        val content = buffer.toString()
-        buffer.setLength(0)
-        
-        lifecycleScope.launch(Dispatchers.Main) {
-            messageAdapter.addMessage(Message(content, Message.Type.RX))
-            if (messageAdapter.itemCount > 0 && binding.autoScrollCheck.isChecked) {
-                binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
-            }
-            updateStatsUI()
         }
     }
 
