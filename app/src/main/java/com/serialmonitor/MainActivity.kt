@@ -329,26 +329,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleEvent(event: String) {
-        when {
-            event == "CONNECTED" -> {
-                binding.connectionStatus.text = getString(R.string.connected)
-                binding.connectionStatus.setTextColor(android.graphics.Color.GREEN)
-                binding.connectButton.isEnabled = false
-                binding.disconnectButton.isEnabled = true
-                messageAdapter.addMessage(Message(getString(R.string.connected), Message.Type.SYS))
-            }
-            event == "DISCONNECTED" -> {
-                binding.connectionStatus.text = getString(R.string.disconnected)
-                binding.connectionStatus.setTextColor(android.graphics.Color.RED)
-                binding.connectButton.isEnabled = true
-                binding.disconnectButton.isEnabled = false
-                messageAdapter.addMessage(Message(getString(R.string.connection_lost), Message.Type.SYS))
-            }
-            event.startsWith("ERROR") -> {
-                binding.connectButton.isEnabled = true
-                binding.disconnectButton.isEnabled = false
-                messageAdapter.addMessage(Message(event, Message.Type.ERR))
-                Toast.makeText(this, event, Toast.LENGTH_LONG).show()
+        lifecycleScope.launch(Dispatchers.Main) {
+            when {
+                event == "CONNECTED" -> {
+                    binding.connectionStatus.text = getString(R.string.connected)
+                    binding.connectionStatus.setTextColor(android.graphics.Color.GREEN)
+                    binding.connectButton.isEnabled = false
+                    binding.disconnectButton.isEnabled = true
+                    messageAdapter.addMessage(Message(getString(R.string.connected), Message.Type.SYS))
+                    Toast.makeText(this@MainActivity, R.string.successfully_connected, Toast.LENGTH_SHORT).show()
+                }
+                event == "DISCONNECTED" -> {
+                    binding.connectionStatus.text = getString(R.string.disconnected)
+                    binding.connectionStatus.setTextColor(android.graphics.Color.RED)
+                    binding.connectButton.isEnabled = true
+                    binding.disconnectButton.isEnabled = false
+                    messageAdapter.addMessage(Message(getString(R.string.disconnected), Message.Type.SYS))
+                }
+                event.startsWith("ERROR") -> {
+                    binding.connectButton.isEnabled = true
+                    binding.disconnectButton.isEnabled = false
+                    messageAdapter.addMessage(Message(event, Message.Type.ERR))
+                    Toast.makeText(this@MainActivity, event, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -373,8 +376,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun connectSerial(portIndex: Int = -1) {
+        if (serialService == null) {
+            Toast.makeText(this, R.string.service_not_ready, Toast.LENGTH_SHORT).show()
+            setupSerial()
+            return
+        }
+
         if (availablePorts.isEmpty()) {
             refreshPorts()
+            Toast.makeText(this, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
             return
         }
 
