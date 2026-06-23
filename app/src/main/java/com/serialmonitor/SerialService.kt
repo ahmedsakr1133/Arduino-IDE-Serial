@@ -28,8 +28,12 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 10)
     val events = _events.asSharedFlow()
 
-    private val _messagesFlow = MutableSharedFlow<Message>(extraBufferCapacity = 100)
+    private val _messagesFlow = MutableSharedFlow<Message>(extraBufferCapacity = 500)
     val messagesFlow = _messagesFlow.asSharedFlow()
+
+    private val rxBuffer = StringBuilder()
+    private var lastRxEmitTime = 0L
+    private val ansiRegex = Regex("\u001B\\[[;\\d]*m")
 
     private val _messages = mutableListOf<Message>()
     fun getMessageHistory(): List<Message> = synchronized(_messages) { _messages.toList() }
@@ -46,13 +50,11 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
         val msg = Message(content, type)
         synchronized(_messages) {
             _messages.add(msg)
-            if (_messages.size > 1000) { // Limit history
+            if (_messages.size > 2000) { // Increased history limit
                 _messages.removeAt(0)
             }
         }
-        serviceScope.launch(Dispatchers.Main) {
-            _messagesFlow.emit(msg)
-        }
+        _messagesFlow.tryEmit(msg)
     }
 
     fun isSerialConnected() = usbSerialPort != null
@@ -170,6 +172,7 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
 
     fun disconnect() {
         serviceScope.launch {
+            synchronized(rxBuffer) { rxBuffer.setLength(0) }
             ioManager?.stop()
             ioManager = null
             try { usbSerialPort?.close() } catch (ignored: Exception) {}
@@ -200,9 +203,37 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     }
 
     override fun onNewData(data: ByteArray) {
-        val text = String(data)
-        addMessage(text, Message.Type.RX)
         _dataBytes.tryEmit(data)
+        
+        val text = String(data, Charsets.UTF_8)
+        val filtered = ansiRegex.replace(text, "")
+        
+        synchronized(rxBuffer) {
+            rxBuffer.append(filtered)
+        }
+        
+        val now = System.currentTimeMillis()
+        if (now - lastRxEmitTime > 200 || filtered.contains('\n') || filtered.contains('\r')) {
+            emitBufferedRx()
+            lastRxEmitTime = now
+        }
+    }
+
+    private fun emitBufferedRx() {
+        val content: String
+        synchronized(rxBuffer) {
+            content = rxBuffer.toString()
+            rxBuffer.setLength(0)
+        }
+        if (content.isEmpty()) return
+        
+        val lines = content.replace("\r\n", "\n").replace("\r", "\n")
+            .split(Regex("(?<=\n)"))
+            .filter { it.isNotEmpty() }
+            
+        lines.forEach { line ->
+            addMessage(line, Message.Type.RX)
+        }
     }
 
     override fun onRunError(e: Exception) {
