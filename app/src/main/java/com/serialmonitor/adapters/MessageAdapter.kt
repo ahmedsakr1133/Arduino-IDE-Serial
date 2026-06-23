@@ -1,11 +1,7 @@
 package com.serialmonitor.adapters
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import android.widget.Toast
 import androidx.recyclerview.widget.RecyclerView
 import com.serialmonitor.Message
 import com.serialmonitor.databinding.ItemMessageBinding
@@ -44,16 +40,6 @@ class MessageAdapter(private val messages: MutableList<Message>) :
 
         holder.binding.root.text = displayContent.trimEnd('\n', '\r')
         holder.binding.root.setTextColor(androidx.core.content.ContextCompat.getColor(context, colorRes))
-
-        holder.binding.root.setOnLongClickListener {
-            val text = holder.binding.root.text.toString()
-            if (text.isNotEmpty()) {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("Serial", text))
-                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-            }
-            true
-        }
     }
 
     override fun getItemCount(): Int = messages.size

@@ -11,4 +11,5 @@
     android:paddingHorizontal="8dp"
     android:paddingVertical="0dp"
     android:textColor="@color/terminal_rx"
-    android:textSize="13sp" />
+    android:textSize="13sp"
+    android:textIsSelectable="true" />
