@@ -296,7 +296,7 @@ class MainActivity : AppCompatActivity() {
                     rxBuffer.setLength(0)
                     lastUpdate = now
                     
-                    val lines = content.split("\n", "\r")
+                    val lines = content.split(Regex("(?<=\n)|(?<=\r)"))
                         .filter { it.isNotEmpty() }
                         .map { Message(it, Message.Type.RX) }
 

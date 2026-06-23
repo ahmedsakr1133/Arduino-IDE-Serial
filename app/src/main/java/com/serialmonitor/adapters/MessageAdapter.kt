@@ -39,8 +39,8 @@ class MessageAdapter(private val messages: MutableList<Message>) :
             Message.Type.ERR -> com.serialmonitor.R.color.terminal_err
         }
 
-        holder.binding.messageText.text = displayContent
-        holder.binding.messageText.setTextColor(androidx.core.content.ContextCompat.getColor(context, colorRes))
+        holder.binding.root.text = displayContent
+        holder.binding.root.setTextColor(androidx.core.content.ContextCompat.getColor(context, colorRes))
     }
 
     override fun getItemCount(): Int = messages.size

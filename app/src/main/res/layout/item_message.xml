@@ -1,23 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/messageText"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:paddingLeft="0dp"
-    android:paddingRight="0dp"
-    android:paddingTop="0dp"
-    android:paddingBottom="0dp">
-
-    <TextView
-        android:id="@+id/messageText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fontFamily="monospace"
-        android:gravity="left"
-        android:textAlignment="gravity"
-        android:textDirection="ltr"
-        android:lineSpacingExtra="0dp"
-        android:paddingHorizontal="6dp"
-        android:paddingVertical="0dp"
-        android:textSize="12sp" />
-</LinearLayout>
+    android:fontFamily="monospace"
+    android:gravity="left"
+    android:textAlignment="gravity"
+    android:textDirection="ltr"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="0dp"
+    android:textColor="@color/terminal_rx"
+    android:textSize="13sp" />
