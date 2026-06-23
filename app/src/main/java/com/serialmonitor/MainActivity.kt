@@ -93,7 +93,10 @@ class MainActivity : AppCompatActivity() {
         setupUI()
         setupSerial()
         
-        handleUsbIntent(intent)
+        // Handle initial USB intent
+        if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            handleUsbIntent(intent)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -175,23 +178,48 @@ class MainActivity : AppCompatActivity() {
 
     private fun observeService() {
         lifecycleScope.launch {
-            serialService?.dataBytes?.collectLatest { data ->
-                val text = String(data)
-                runOnUiThread {
-                    messageAdapter.addMessage(Message(text, Message.Type.RX))
-                    if (messageAdapter.itemCount > 0 && binding.autoScrollCheck.isChecked) {
-                        binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
-                    }
-                    updateStats(data.size, 0)
+            val stringBuffer = StringBuilder()
+            var lastUpdate = System.currentTimeMillis()
+
+            serialService?.dataBytes?.collect { data ->
+                stringBuffer.append(String(data))
+                totalRx += data.size
+                
+                val now = System.currentTimeMillis()
+                if (now - lastUpdate > 100 || stringBuffer.length > 2000) {
+                    flushBuffer(stringBuffer)
+                    lastUpdate = now
                 }
             }
         }
 
         lifecycleScope.launch {
-            serialService?.events?.collectLatest { event ->
+            serialService?.events?.collect { event ->
                 handleEvent(event)
             }
         }
+    }
+
+    private fun flushBuffer(buffer: StringBuilder) {
+        if (buffer.isEmpty()) {
+            lifecycleScope.launch(Dispatchers.Main) { updateStatsUI() }
+            return
+        }
+        val content = buffer.toString()
+        buffer.setLength(0)
+        
+        lifecycleScope.launch(Dispatchers.Main) {
+            messageAdapter.addMessage(Message(content, Message.Type.RX))
+            if (messageAdapter.itemCount > 0 && binding.autoScrollCheck.isChecked) {
+                binding.terminalRecyclerView.scrollToPosition(messageAdapter.itemCount - 1)
+            }
+            updateStatsUI()
+        }
+    }
+
+    private fun updateStatsUI() {
+        binding.receivedStats.text = getString(R.string.received_bytes, totalRx)
+        binding.sentStats.text = getString(R.string.sent_bytes, totalTx)
     }
 
     private fun handleEvent(event: String) {
@@ -292,7 +320,8 @@ class MainActivity : AppCompatActivity() {
         historyIndex = commandHistory.size
         
         binding.commandInput.text.clear()
-        updateStats(0, data.size)
+        totalTx += data.size
+        updateStatsUI()
     }
 
     private fun navigateHistory(prev: Boolean) {
@@ -315,8 +344,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateStats(rx: Int, tx: Int) {
         totalRx += rx
         totalTx += tx
-        binding.receivedStats.text = getString(R.string.received_bytes, totalRx)
-        binding.sentStats.text = getString(R.string.sent_bytes, totalTx)
+        updateStatsUI()
     }
 
     override fun onDestroy() {

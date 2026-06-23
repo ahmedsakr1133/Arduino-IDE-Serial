@@ -22,10 +22,10 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     private var ioManager: SerialInputOutputManager? = null
     private var connection: UsbDeviceConnection? = null
 
-    private val _dataBytes = MutableSharedFlow<ByteArray>()
+    private val _dataBytes = MutableSharedFlow<ByteArray>(extraBufferCapacity = 100)
     val dataBytes = _dataBytes.asSharedFlow()
 
-    private val _events = MutableSharedFlow<String>()
+    private val _events = MutableSharedFlow<String>(extraBufferCapacity = 10)
     val events = _events.asSharedFlow()
 
     inner class SerialBinder : Binder() {
@@ -121,9 +121,7 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     }
 
     override fun onNewData(data: ByteArray) {
-        serviceScope.launch {
-            _dataBytes.emit(data)
-        }
+        _dataBytes.tryEmit(data)
     }
 
     override fun onRunError(e: Exception) {
