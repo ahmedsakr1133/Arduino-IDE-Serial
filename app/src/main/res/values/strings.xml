@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">مراقب المنفذ التسلسلي</string>
+    <string name="app_name">SaQr Serial</string>
     <string name="connect">اتصال</string>
     <string name="disconnect">قطع الاتصال</string>
     <string name="clear">مسح</string>
@@ -32,4 +32,18 @@
     <string name="serial_settings">إعدادات التسلسل</string>
     <string name="successfully_connected">تم الاتصال بنجاح</string>
     <string name="service_not_ready">الخدمة غير جاهزة بعد</string>
+    <string name="local_server">سيرفر محلي</string>
+    <string name="server_active">السيرفر يعمل على: %1$s</string>
+    <string name="server_stopped">السيرفر متوقف</string>
+    <string name="language">اللغة</string>
+    <string name="arabic">العربية</string>
+    <string name="english">الإنجليزية</string>
+    <string name="theme">المظهر</string>
+    <string name="light_mode">وضع النهار</string>
+    <string name="dark_mode">وضع الليل</string>
+    <string name="night_mode">وضع داكن جداً</string>
+    <string name="server_port">منفذ السيرفر</string>
+    <string name="port_hint">مثال: 8080</string>
+    <string name="connection">الاتصال</string>
+    <string name="server">السيرفر</string>
 </resources>

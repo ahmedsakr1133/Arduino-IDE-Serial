@@ -1,5 +1,5 @@
 {
-  "name": "مراقب المنفذ التسلسلي",
+  "name": "SaQr Serial",
   "description": "تطبيق Serial Monitor احترافي للأندرويد يدعم كابلات USB OTG والعديد من رقاقات الاتصال التسلسلي.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="surface_dark">#000000</color>
+    <color name="text_primary">#F8FAFC</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="text_on_primary">#FFFFFF</color>
+    <color name="surface_page">#000000</color>
+    <color name="surface_tool">#000000</color>
+    <color name="surface_accent">#0A0A0A</color>
+    <color name="surface_status">#0A0A0A</color>
+    <color name="border_light">#1A1A1A</color>
+    <color name="border_medium">#262626</color>
+    <color name="primary_blue">#3B82F6</color>
+    <color name="secondary_gray">#1E293B</color>
+    <color name="terminal_rx">#4ADE80</color>
+    <color name="terminal_tx">#FACC15</color>
+    <color name="terminal_sys">#94A3B8</color>
+    <color name="terminal_err">#F87171</color>
+    <color name="terminal_bg">#000000</color>
+    <color name="switch_on">#22C55E</color>
+    <color name="switch_off">#EF4444</color>
+</resources>

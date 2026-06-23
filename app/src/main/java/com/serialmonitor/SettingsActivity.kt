@@ -1,8 +1,10 @@
 package com.serialmonitor
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.widget.ArrayAdapter
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.serialmonitor.databinding.ActivitySettingsBinding
@@ -11,6 +13,8 @@ class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
     private val baudRates = listOf(300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 74880, 115200, 230400, 250000, 460800, 921600)
+    private val languages = listOf("ar", "en")
+    private val themes = listOf("light", "dark", "night")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,7 +26,12 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.saveButton.setOnClickListener {
             saveSettings()
+            Toast.makeText(this, R.string.save, Toast.LENGTH_SHORT).show()
             finish()
+            // Restart MainActivity to apply language/theme
+            val intent = Intent(this, MainActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
         }
         
         binding.closeButton.setOnClickListener {
@@ -31,6 +40,16 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun setupSpinners() {
+        val langOptions = listOf(getString(R.string.arabic), getString(R.string.english))
+        val langAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, langOptions)
+        langAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.languageSpinner.adapter = langAdapter
+
+        val themeOptions = listOf(getString(R.string.light_mode), getString(R.string.dark_mode), getString(R.string.night_mode))
+        val themeAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, themeOptions)
+        themeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.themeSpinner.adapter = themeAdapter
+
         val baudAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, baudRates)
         baudAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.baudSpinner.adapter = baudAdapter
@@ -55,6 +74,15 @@ class SettingsActivity : AppCompatActivity() {
     private fun loadSettings() {
         val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
         
+        val lang = prefs.getString("language", "ar") ?: "ar"
+        binding.languageSpinner.setSelection(languages.indexOf(lang).coerceAtLeast(0))
+
+        val theme = prefs.getString("theme", "dark") ?: "dark"
+        binding.themeSpinner.setSelection(themes.indexOf(theme).coerceAtLeast(0))
+
+        val serverPort = prefs.getInt("server_port", 8080)
+        binding.serverPortInput.setText(serverPort.toString())
+
         val baudRate = prefs.getInt("baud_rate", 115200)
         binding.baudSpinner.setSelection(baudRates.indexOf(baudRate).coerceAtLeast(0))
 
@@ -88,6 +116,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun saveSettings() {
         val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+        val lang = languages[binding.languageSpinner.selectedItemPosition]
+        val theme = themes[binding.themeSpinner.selectedItemPosition]
+        val serverPortStr = binding.serverPortInput.text.toString()
+        val serverPort = serverPortStr.toIntOrNull() ?: 8080
+
         val baudRate = baudRates[binding.baudSpinner.selectedItemPosition]
         val dataBits = when(binding.dataBitsSpinner.selectedItemPosition) {
             0 -> UsbSerialPort.DATABITS_5
@@ -110,6 +143,9 @@ class SettingsActivity : AppCompatActivity() {
         val lineEnding = binding.lineEndingSpinner.selectedItemPosition
 
         prefs.edit().apply {
+            putString("language", lang)
+            putString("theme", theme)
+            putInt("server_port", serverPort)
             putInt("baud_rate", baudRate)
             putInt("data_bits", dataBits)
             putInt("stop_bits", stopBits)

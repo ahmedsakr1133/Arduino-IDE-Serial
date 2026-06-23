@@ -66,6 +66,55 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var serverSocket: java.net.ServerSocket? = null
+    private var serverJob: Job? = null
+
+    fun startServer(port: Int) {
+        serverJob?.cancel()
+        serverJob = serviceScope.launch {
+            try {
+                serverSocket = java.net.ServerSocket(port)
+                emitEvent("SERVER_STARTED:$port")
+                while (isActive) {
+                    val client = serverSocket?.accept() ?: break
+                    launch {
+                        try {
+                            val reader = client.getInputStream().bufferedReader()
+                            val firstLine = reader.readLine()
+                            if (firstLine != null && firstLine.contains("GET /send?cmd=")) {
+                                val cmd = firstLine.substringAfter("cmd=").substringBefore(" ")
+                                val decodedCmd = java.net.URLDecoder.decode(cmd, "UTF-8")
+                                write(decodedCmd.toByteArray())
+                                emitEvent("SERVER_CMD:$decodedCmd")
+                                
+                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK: $decodedCmd"
+                                client.getOutputStream().write(response.toByteArray())
+                            } else {
+                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nSerial Monitor Server Running"
+                                client.getOutputStream().write(response.toByteArray())
+                            }
+                        } catch (e: Exception) {
+                            // Ignore client errors
+                        } finally {
+                            try { client.close() } catch (ignored: Exception) {}
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                if (isActive) {
+                    emitEvent("SERVER_ERROR: ${e.message}")
+                }
+            }
+        }
+    }
+
+    fun stopServer() {
+        serverJob?.cancel()
+        serverJob = null
+        try { serverSocket?.close() } catch (ignored: Exception) {}
+        serverSocket = null
+        emitEvent("SERVER_STOPPED")
+    }
 
     fun connect(port: UsbSerialPort, baudRate: Int, dataBits: Int, stopBits: Int, parity: Int) {
         serviceScope.launch {

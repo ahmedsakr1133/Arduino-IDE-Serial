@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.IBinder
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -46,6 +47,20 @@ class MainActivity : AppCompatActivity() {
 
     private var totalRx = 0L
     private var totalTx = 0L
+    private var serverPort = 8080
+    private var currentServerAddress = ""
+
+    override fun attachBaseContext(newBase: Context) {
+        val prefs = newBase.getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+        val lang = prefs.getString("language", "ar") ?: "ar"
+        val locale = java.util.Locale(lang)
+        java.util.Locale.setDefault(locale)
+        val config = newBase.resources.configuration
+        config.setLocale(locale)
+        config.setLayoutDirection(locale)
+        val context = newBase.createConfigurationContext(config)
+        super.attachBaseContext(context)
+    }
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -84,6 +99,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        applyTheme()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -107,6 +123,15 @@ class MainActivity : AppCompatActivity() {
         
         if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             handleUsbIntent(intent)
+        }
+    }
+
+    private fun applyTheme() {
+        val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+        val theme = prefs.getString("theme", "dark") ?: "dark"
+        when(theme) {
+            "light" -> androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO)
+            "dark", "night" -> androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES)
         }
     }
 
@@ -135,6 +160,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         loadSettings()
+        
+        // Update switch colors based on current state
+        updateSwitchColors(binding.connectionSwitch, binding.connectionSwitch.isChecked)
+        updateSwitchColors(binding.serverSwitch, binding.serverSwitch.isChecked)
     }
 
     private fun loadSettings() {
@@ -144,6 +173,7 @@ class MainActivity : AppCompatActivity() {
         stopBits = prefs.getInt("stop_bits", UsbSerialPort.STOPBITS_1)
         parity = prefs.getInt("parity", UsbSerialPort.PARITY_NONE)
         lineEnding = prefs.getInt("line_ending", 3)
+        serverPort = prefs.getInt("server_port", 8080)
     }
 
     private fun showPortSelectionDialog() {
@@ -222,8 +252,6 @@ class MainActivity : AppCompatActivity() {
             adapter = messageAdapter
         }
 
-        binding.connectButton.setOnClickListener { showPortSelectionDialog() }
-        binding.disconnectButton.setOnClickListener { disconnectSerial() }
         binding.settingsButton.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
@@ -232,6 +260,15 @@ class MainActivity : AppCompatActivity() {
             totalRx = 0
             totalTx = 0
             updateStatsUI()
+        }
+
+        binding.connectionSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                showPortSelectionDialog()
+            } else {
+                disconnectSerial()
+            }
+            updateSwitchColors(binding.connectionSwitch, isChecked)
         }
 
         binding.sendButton.setOnClickListener { sendData() }
@@ -251,7 +288,35 @@ class MainActivity : AppCompatActivity() {
             if (isChecked) startAutoSend() else stopAutoSend()
         }
 
+        binding.serverSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                serialService?.startServer(serverPort)
+            } else {
+                serialService?.stopServer()
+                binding.copyServerAddress.visibility = View.GONE
+            }
+            updateSwitchColors(binding.serverSwitch, isChecked)
+        }
+
+        binding.copyServerAddress.setOnClickListener {
+            if (currentServerAddress.isNotEmpty()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("Server Address", currentServerAddress)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "Copied: $currentServerAddress", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         refreshPorts()
+    }
+
+    private fun updateSwitchColors(switch: androidx.appcompat.widget.SwitchCompat, isChecked: Boolean) {
+        val color = if (isChecked) {
+            androidx.core.content.ContextCompat.getColor(this, R.color.switch_on)
+        } else {
+            androidx.core.content.ContextCompat.getColor(this, R.color.switch_off)
+        }
+        switch.thumbTintList = android.content.res.ColorStateList.valueOf(color)
     }
 
     private fun startAutoSend() {
@@ -328,29 +393,76 @@ class MainActivity : AppCompatActivity() {
         binding.sentStats.text = getString(R.string.sent_bytes, totalTx)
     }
 
+    private fun getLocalIpAddress(): String {
+        try {
+            val en = java.net.NetworkInterface.getNetworkInterfaces()
+            while (en.hasMoreElements()) {
+                val intf = en.nextElement()
+                val enumIpAddr = intf.inetAddresses
+                while (enumIpAddr.hasMoreElements()) {
+                    val inetAddress = enumIpAddr.nextElement()
+                    if (!inetAddress.isLoopbackAddress && inetAddress is java.net.Inet4Address) {
+                        return inetAddress.hostAddress ?: "Unknown"
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            ex.printStackTrace()
+        }
+        return "Unknown"
+    }
+
     private fun handleEvent(event: String) {
         lifecycleScope.launch(Dispatchers.Main) {
             when {
                 event == "CONNECTED" -> {
                     binding.connectionStatus.text = getString(R.string.connected)
-                    binding.connectionStatus.setTextColor(android.graphics.Color.GREEN)
-                    binding.connectButton.isEnabled = false
-                    binding.disconnectButton.isEnabled = true
+                    binding.connectionStatus.setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.terminal_rx))
+                    binding.connectionSwitch.isChecked = true
+                    updateSwitchColors(binding.connectionSwitch, true)
                     messageAdapter.addMessage(Message(getString(R.string.connected), Message.Type.SYS))
                     Toast.makeText(this@MainActivity, R.string.successfully_connected, Toast.LENGTH_SHORT).show()
                 }
                 event == "DISCONNECTED" -> {
                     binding.connectionStatus.text = getString(R.string.disconnected)
-                    binding.connectionStatus.setTextColor(android.graphics.Color.RED)
-                    binding.connectButton.isEnabled = true
-                    binding.disconnectButton.isEnabled = false
+                    binding.connectionStatus.setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.terminal_err))
+                    binding.connectionSwitch.isChecked = false
+                    updateSwitchColors(binding.connectionSwitch, false)
                     messageAdapter.addMessage(Message(getString(R.string.disconnected), Message.Type.SYS))
                 }
+                event.startsWith("SERVER_STARTED") -> {
+                    val port = event.substringAfter(":")
+                    val ip = getLocalIpAddress()
+                    currentServerAddress = "http://$ip:$port"
+                    val msg = getString(R.string.server_active, "$ip:$port")
+                    messageAdapter.addMessage(Message(msg, Message.Type.SYS))
+                    binding.serverSwitch.isChecked = true
+                    updateSwitchColors(binding.serverSwitch, true)
+                    binding.copyServerAddress.visibility = View.VISIBLE
+                }
+                event == "SERVER_STOPPED" -> {
+                    messageAdapter.addMessage(Message(getString(R.string.server_stopped), Message.Type.SYS))
+                    binding.serverSwitch.isChecked = false
+                    updateSwitchColors(binding.serverSwitch, false)
+                    binding.copyServerAddress.visibility = View.GONE
+                    currentServerAddress = ""
+                }
+                event.startsWith("SERVER_CMD") -> {
+                    val cmd = event.substringAfter(":")
+                    messageAdapter.addMessage(Message("SERVER CMD: $cmd", Message.Type.TX))
+                    totalTx += cmd.length
+                    updateStatsUI()
+                }
                 event.startsWith("ERROR") -> {
-                    binding.connectButton.isEnabled = true
-                    binding.disconnectButton.isEnabled = false
+                    binding.connectionSwitch.isChecked = false
+                    updateSwitchColors(binding.connectionSwitch, false)
                     messageAdapter.addMessage(Message(event, Message.Type.ERR))
                     Toast.makeText(this@MainActivity, event, Toast.LENGTH_LONG).show()
+                }
+                event.startsWith("SERVER_ERROR") -> {
+                    messageAdapter.addMessage(Message(event, Message.Type.ERR))
+                    binding.serverSwitch.isChecked = false
+                    updateSwitchColors(binding.serverSwitch, false)
                 }
             }
         }
@@ -379,19 +491,23 @@ class MainActivity : AppCompatActivity() {
         if (serialService == null) {
             Toast.makeText(this, R.string.service_not_ready, Toast.LENGTH_SHORT).show()
             setupSerial()
+            binding.connectionSwitch.isChecked = false
             return
         }
 
         if (availablePorts.isEmpty()) {
             refreshPorts()
             Toast.makeText(this, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
+            binding.connectionSwitch.isChecked = false
             return
         }
 
         val index = if (portIndex != -1) portIndex else 0
-        if (index >= availablePorts.size) return
+        if (index >= availablePorts.size) {
+            binding.connectionSwitch.isChecked = false
+            return
+        }
         
-        binding.connectButton.isEnabled = false
         val port = availablePorts[index]
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
         
