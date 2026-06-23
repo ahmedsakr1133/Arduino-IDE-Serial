@@ -24,14 +24,22 @@ class MessageAdapter(private val messages: MutableList<Message>) :
     override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
         val message = messages[position]
         val context = holder.itemView.context
-        val (prefix, colorRes) = when (message.type) {
-            Message.Type.RX -> "►" to com.serialmonitor.R.color.terminal_rx
-            Message.Type.TX -> "◄" to com.serialmonitor.R.color.terminal_tx
-            Message.Type.SYS -> "ℹ" to com.serialmonitor.R.color.terminal_sys
-            Message.Type.ERR -> "✗" to com.serialmonitor.R.color.terminal_err
+        
+        val displayContent = when (message.type) {
+            Message.Type.RX -> message.content
+            Message.Type.TX -> "${message.timestamp} [◄] ${message.content}"
+            Message.Type.SYS -> "${message.timestamp} [ℹ] ${message.content}"
+            Message.Type.ERR -> "${message.timestamp} [✗] ${message.content}"
         }
 
-        holder.binding.messageText.text = "${message.timestamp} [$prefix] ${message.content}"
+        val colorRes = when (message.type) {
+            Message.Type.RX -> com.serialmonitor.R.color.terminal_rx
+            Message.Type.TX -> com.serialmonitor.R.color.terminal_tx
+            Message.Type.SYS -> com.serialmonitor.R.color.terminal_sys
+            Message.Type.ERR -> com.serialmonitor.R.color.terminal_err
+        }
+
+        holder.binding.messageText.text = displayContent
         holder.binding.messageText.setTextColor(androidx.core.content.ContextCompat.getColor(context, colorRes))
     }
 

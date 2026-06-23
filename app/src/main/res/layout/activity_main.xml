@@ -8,129 +8,67 @@
     android:fitsSystemWindows="true"
     android:background="@color/surface_page">
 
-    <!-- Toolbar -->
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar"
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:background="@color/surface_tool"
-        android:elevation="4dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:title="@string/app_name"
-        app:titleTextColor="@android:color/white" />
-
-    <!-- Settings bar -->
+    <!-- Control bar -->
     <LinearLayout
-        android:id="@+id/settingsBar"
+        android:id="@+id/controlBar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/surface_accent"
-        android:orientation="vertical"
-        android:padding="8dp"
-        app:layout_constraintTop_toBottomOf="@id/toolbar">
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="6dp"
+        app:layout_constraintTop_toTopOf="parent">
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="8dp"
-            android:orientation="horizontal">
+        <Button
+            android:id="@+id/connectButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_primary"
+            android:padding="0dp"
+            android:text="@string/connect"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:background="@drawable/bg_settings_item"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="6dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="6dp">
+        <Button
+            android:id="@+id/disconnectButton"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_marginHorizontal="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_button_secondary"
+            android:enabled="false"
+            android:padding="0dp"
+            android:text="@string/disconnect"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/port"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp" />
+        <ImageButton
+            android:id="@+id/clearButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_button_secondary"
+            android:contentDescription="@string/clear"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@android:drawable/ic_menu_delete"
+            app:tint="@android:color/white" />
 
-                <Spinner
-                    android:id="@+id/portSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="32dp"
-                    android:backgroundTint="@android:color/white" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_settings_item"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="6dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="6dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/baud_rate"
-                    android:textColor="#94A3B8"
-                    android:textSize="11sp" />
-
-                <Spinner
-                    android:id="@+id/baudSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="32dp"
-                    android:backgroundTint="@android:color/white" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/connectButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_button_primary"
-                android:padding="0dp"
-                android:text="@string/connect"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/disconnectButton"
-                android:layout_width="0dp"
-                android:layout_height="48dp"
-                android:layout_marginHorizontal="8dp"
-                android:layout_weight="1"
-                android:background="@drawable/bg_button_secondary"
-                android:enabled="false"
-                android:padding="0dp"
-                android:text="@string/disconnect"
-                android:textAllCaps="false"
-                android:textColor="@android:color/white"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <ImageButton
-                android:id="@+id/clearButton"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@drawable/bg_button_secondary"
-                android:contentDescription="@string/clear"
-                android:padding="10dp"
-                android:scaleType="centerInside"
-                android:src="@android:drawable/ic_menu_delete"
-                app:tint="@android:color/white" />
-        </LinearLayout>
+        <ImageButton
+            android:id="@+id/settingsButton"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/bg_button_secondary"
+            android:contentDescription="@string/settings"
+            android:padding="8dp"
+            android:scaleType="centerInside"
+            android:src="@android:drawable/ic_menu_preferences"
+            app:tint="@android:color/white" />
     </LinearLayout>
 
     <!-- Terminal Display -->
@@ -141,7 +79,7 @@
         android:background="@color/surface_dark"
         android:padding="8dp"
         app:layout_constraintBottom_toTopOf="@id/statusBar"
-        app:layout_constraintTop_toBottomOf="@id/settingsBar" />
+        app:layout_constraintTop_toBottomOf="@id/controlBar" />
 
     <!-- Status Bar -->
     <LinearLayout
@@ -196,31 +134,31 @@
     <LinearLayout
         android:id="@+id/navBar"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
+        android:layout_height="32dp"
         android:background="@color/surface_accent"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="12dp"
+        android:paddingHorizontal="10dp"
         android:paddingVertical="0dp"
         app:layout_constraintBottom_toTopOf="@id/inputBar">
 
         <ImageButton
             android:id="@+id/prevCommand"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
             android:background="@drawable/bg_nav_button"
-            android:padding="6dp"
+            android:padding="4dp"
             android:scaleType="centerInside"
             android:src="@android:drawable/arrow_up_float"
             app:tint="@android:color/white" />
 
         <ImageButton
             android:id="@+id/nextCommand"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginStart="8dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="6dp"
             android:background="@drawable/bg_nav_button"
-            android:padding="6dp"
+            android:padding="4dp"
             android:scaleType="centerInside"
             android:src="@android:drawable/arrow_down_float"
             app:tint="@android:color/white" />
@@ -237,7 +175,7 @@
             android:checked="true"
             android:text="@string/auto_send"
             android:textColor="@android:color/white"
-            android:textSize="13sp" />
+            android:textSize="11sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -247,15 +185,15 @@
         android:background="@color/surface_tool"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="10dp"
+        android:padding="6dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <FrameLayout
             android:layout_width="0dp"
-            android:layout_height="48dp"
+            android:layout_height="36dp"
             android:layout_weight="1"
             android:background="@drawable/bg_input_rounded"
-            android:paddingHorizontal="14dp">
+            android:paddingHorizontal="10dp">
 
             <EditText
                 android:id="@+id/commandInput"
@@ -268,20 +206,21 @@
                 android:inputType="text"
                 android:textColor="@android:color/white"
                 android:textColorHint="#666666"
-                android:textSize="16sp" />
+                android:textSize="13sp" />
         </FrameLayout>
 
-        <ImageButton
+        <Button
             android:id="@+id/sendButton"
-            android:layout_width="64dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="10dp"
+            android:layout_width="60dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="6dp"
             android:background="@drawable/bg_button_primary"
-            android:contentDescription="@string/send"
-            android:padding="10dp"
-            android:scaleType="centerInside"
-            android:src="@android:drawable/ic_menu_send"
-            app:tint="@android:color/white" />
+            android:padding="0dp"
+            android:text="@string/send"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

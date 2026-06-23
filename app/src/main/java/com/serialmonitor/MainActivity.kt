@@ -5,9 +5,11 @@ import android.content.*
 import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.os.IBinder
-import android.view.View
+import android.view.Menu
+import android.view.MenuItem
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,7 +17,7 @@ import com.hoho.android.usbserial.driver.UsbSerialPort
 import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.serialmonitor.adapters.MessageAdapter
 import com.serialmonitor.databinding.ActivityMainBinding
-import kotlinx.coroutines.flow.collectLatest
+import com.serialmonitor.databinding.DialogSettingsBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -27,11 +29,23 @@ class MainActivity : AppCompatActivity() {
     private var isBound = false
     private lateinit var messageAdapter: MessageAdapter
     
-    private val baudRates = listOf(300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 128000, 256000)
+    private val baudRates = listOf(300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 74880, 115200, 230400, 250000, 460800, 921600)
     private var availablePorts = mutableListOf<UsbSerialPort>()
+
+    // Serial settings
+    private var baudRate = 115200
+    private var dataBits = UsbSerialPort.DATABITS_8
+    private var stopBits = UsbSerialPort.STOPBITS_1
+    private var parity = UsbSerialPort.PARITY_NONE
+    private var lineEnding = 3 // Standard default (both)
     
     private val commandHistory = mutableListOf<String>()
     private var historyIndex = -1
+
+    private val ansiRegex = Regex("\u001B\\[[;?]*[0-9.;]*[a-zA-Z]")
+
+    private var totalRx = 0L
+    private var totalTx = 0L
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -48,8 +62,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var autoSendJob: kotlinx.coroutines.Job? = null
-    private var isLogging = false
-    private var logFile: java.io.File? = null
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -85,7 +97,7 @@ class MainActivity : AppCompatActivity() {
 
         val filter = IntentFilter("com.serialmonitor.USB_PERMISSION")
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(usbReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(usbReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(usbReceiver, filter)
         }
@@ -93,10 +105,132 @@ class MainActivity : AppCompatActivity() {
         setupUI()
         setupSerial()
         
-        // Handle initial USB intent
         if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             handleUsbIntent(intent)
         }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                showSettingsDialog()
+                true
+            }
+            R.id.action_clear -> {
+                messageAdapter.clear()
+                totalRx = 0
+                totalTx = 0
+                updateStatsUI()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun showSettingsDialog() {
+        val dialogBinding = DialogSettingsBinding.inflate(layoutInflater)
+        
+        val baudAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, baudRates)
+        baudAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        dialogBinding.baudSpinner.adapter = baudAdapter
+        dialogBinding.baudSpinner.setSelection(baudRates.indexOf(baudRate).coerceAtLeast(0))
+
+        val dataBitsValues = listOf(5, 6, 7, 8)
+        val dataBitsAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, dataBitsValues)
+        dialogBinding.dataBitsSpinner.adapter = dataBitsAdapter
+        dialogBinding.dataBitsSpinner.setSelection(dataBitsValues.indexOf(when(dataBits) {
+            UsbSerialPort.DATABITS_5 -> 5
+            UsbSerialPort.DATABITS_6 -> 6
+            UsbSerialPort.DATABITS_7 -> 7
+            else -> 8
+        }))
+
+        val stopBitsValues = listOf("1", "1.5", "2")
+        val stopBitsAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, stopBitsValues)
+        dialogBinding.stopBitsSpinner.adapter = stopBitsAdapter
+        dialogBinding.stopBitsSpinner.setSelection(when(stopBits) {
+            UsbSerialPort.STOPBITS_1_5 -> 1
+            UsbSerialPort.STOPBITS_2 -> 2
+            else -> 0
+        })
+
+        val parityOptions = listOf(getString(R.string.none), getString(R.string.odd), getString(R.string.even), getString(R.string.mark), getString(R.string.space))
+        val parityAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, parityOptions)
+        dialogBinding.paritySpinner.adapter = parityAdapter
+        dialogBinding.paritySpinner.setSelection(when(parity) {
+            UsbSerialPort.PARITY_ODD -> 1
+            UsbSerialPort.PARITY_EVEN -> 2
+            UsbSerialPort.PARITY_MARK -> 3
+            UsbSerialPort.PARITY_SPACE -> 4
+            else -> 0
+        })
+
+        val lineEndingOptions = listOf(getString(R.string.none), getString(R.string.nl), getString(R.string.cr), getString(R.string.both))
+        val lineEndingAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, lineEndingOptions)
+        dialogBinding.lineEndingSpinner.adapter = lineEndingAdapter
+        dialogBinding.lineEndingSpinner.setSelection(lineEnding)
+
+        refreshPortsInDialog(dialogBinding)
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings)
+            .setView(dialogBinding.root)
+            .setPositiveButton(R.string.connect) { _, _ ->
+                baudRate = baudRates[dialogBinding.baudSpinner.selectedItemPosition]
+                dataBits = when(dialogBinding.dataBitsSpinner.selectedItemPosition) {
+                    0 -> UsbSerialPort.DATABITS_5
+                    1 -> UsbSerialPort.DATABITS_6
+                    2 -> UsbSerialPort.DATABITS_7
+                    else -> UsbSerialPort.DATABITS_8
+                }
+                stopBits = when(dialogBinding.stopBitsSpinner.selectedItemPosition) {
+                    1 -> UsbSerialPort.STOPBITS_1_5
+                    2 -> UsbSerialPort.STOPBITS_2
+                    else -> UsbSerialPort.STOPBITS_1
+                }
+                parity = when(dialogBinding.paritySpinner.selectedItemPosition) {
+                    1 -> UsbSerialPort.PARITY_ODD
+                    2 -> UsbSerialPort.PARITY_EVEN
+                    3 -> UsbSerialPort.PARITY_MARK
+                    4 -> UsbSerialPort.PARITY_SPACE
+                    else -> UsbSerialPort.PARITY_NONE
+                }
+                lineEnding = dialogBinding.lineEndingSpinner.selectedItemPosition
+                
+                if (dialogBinding.portSpinner.adapter != null && dialogBinding.portSpinner.adapter.count > 0) {
+                    connectSerial(dialogBinding.portSpinner.selectedItemPosition)
+                } else {
+                    Toast.makeText(this, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun refreshPortsInDialog(dialogBinding: DialogSettingsBinding) {
+        val usbManager = getSystemService(USB_SERVICE) as UsbManager
+        val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
+        val tempPorts = mutableListOf<UsbSerialPort>()
+        val portNames = mutableListOf<String>()
+
+        for (driver in drivers) {
+            for (port in driver.ports) {
+                tempPorts.add(port)
+                portNames.add("${driver.device.productName ?: "USB Device"} (${port.portNumber})")
+            }
+        }
+
+        availablePorts.clear()
+        availablePorts.addAll(tempPorts)
+        
+        val portAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, portNames)
+        portAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        dialogBinding.portSpinner.adapter = portAdapter
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -107,6 +241,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleUsbIntent(intent: Intent?) {
         if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             refreshPorts()
+            showSettingsDialog()
         }
     }
 
@@ -119,16 +254,14 @@ class MainActivity : AppCompatActivity() {
             adapter = messageAdapter
         }
 
-        val baudAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, baudRates)
-        baudAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.baudSpinner.adapter = baudAdapter
-        binding.baudSpinner.setSelection(baudRates.indexOf(9600))
-
-        binding.connectButton.setOnClickListener { connectSerial() }
+        binding.connectButton.setOnClickListener { showSettingsDialog() }
         binding.disconnectButton.setOnClickListener { disconnectSerial() }
+        binding.settingsButton.setOnClickListener { showSettingsDialog() }
         binding.clearButton.setOnClickListener {
             messageAdapter.clear()
-            Toast.makeText(this, R.string.screen_cleared, Toast.LENGTH_SHORT).show()
+            totalRx = 0
+            totalTx = 0
+            updateStatsUI()
         }
 
         binding.sendButton.setOnClickListener { sendData() }
@@ -155,7 +288,7 @@ class MainActivity : AppCompatActivity() {
         autoSendJob?.cancel()
         autoSendJob = lifecycleScope.launch {
             while (true) {
-                kotlinx.coroutines.delay(1000) // Default 1 second
+                kotlinx.coroutines.delay(1000)
                 sendData()
             }
         }
@@ -182,7 +315,10 @@ class MainActivity : AppCompatActivity() {
             var lastUpdate = System.currentTimeMillis()
 
             serialService?.dataBytes?.collect { data ->
-                stringBuffer.append(String(data))
+                val text = String(data)
+                val filteredText = ansiRegex.replace(text, "")
+                
+                stringBuffer.append(filteredText)
                 totalRx += data.size
                 
                 val now = System.currentTimeMillis()
@@ -252,38 +388,31 @@ class MainActivity : AppCompatActivity() {
             val usbManager = getSystemService(USB_SERVICE) as UsbManager
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
             val newAvailablePorts = mutableListOf<UsbSerialPort>()
-            val portNames = mutableListOf<String>()
 
             for (driver in drivers) {
-                val device = driver.device
                 for (port in driver.ports) {
                     newAvailablePorts.add(port)
-                    portNames.add("${device.productName ?: "USB Device"} (${port.portNumber})")
                 }
             }
 
             withContext(Dispatchers.Main) {
                 availablePorts.clear()
                 availablePorts.addAll(newAvailablePorts)
-                val portAdapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_item, portNames)
-                portAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                binding.portSpinner.adapter = portAdapter
-
-                if (portNames.isEmpty()) {
-                    Toast.makeText(this@MainActivity, R.string.no_devices_found, Toast.LENGTH_SHORT).show()
-                }
             }
         }
     }
 
-    private fun connectSerial() {
+    private fun connectSerial(portIndex: Int = -1) {
         if (availablePorts.isEmpty()) {
             refreshPorts()
             return
         }
 
+        val index = if (portIndex != -1) portIndex else 0
+        if (index >= availablePorts.size) return
+        
         binding.connectButton.isEnabled = false
-        val port = availablePorts[binding.portSpinner.selectedItemPosition]
+        val port = availablePorts[index]
         val usbManager = getSystemService(USB_SERVICE) as UsbManager
         
         if (!usbManager.hasPermission(port.driver.device)) {
@@ -293,8 +422,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val baudRate = baudRates[binding.baudSpinner.selectedItemPosition]
-        serialService?.connect(port, baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+        serialService?.connect(port, baudRate, dataBits, stopBits, parity)
     }
 
     private fun disconnectSerial() {
@@ -305,7 +433,13 @@ class MainActivity : AppCompatActivity() {
         val text = binding.commandInput.text.toString()
         if (text.isEmpty()) return
 
-        val data = (text + "\r\n").toByteArray()
+        val suffix = when(lineEnding) {
+            1 -> "\n"
+            2 -> "\r"
+            3 -> "\r\n"
+            else -> ""
+        }
+        val data = (text + suffix).toByteArray()
         serialService?.write(data)
         
         messageAdapter.addMessage(Message(text, Message.Type.TX))
@@ -338,18 +472,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var totalRx = 0
-    private var totalTx = 0
-
-    private fun updateStats(rx: Int, tx: Int) {
-        totalRx += rx
-        totalTx += tx
-        updateStatsUI()
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(usbReceiver)
+        try {
+            unregisterReceiver(usbReceiver)
+        } catch (ignored: Exception) {}
         if (isBound) {
             unbindService(serviceConnection)
             isBound = false

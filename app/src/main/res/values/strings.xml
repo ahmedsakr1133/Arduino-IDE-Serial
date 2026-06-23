@@ -33,4 +33,8 @@
     <string name="odd">فردي</string>
     <string name="mark">علامة</string>
     <string name="space">مسافة</string>
+    <string name="line_ending">نهاية السطر</string>
+    <string name="nl">Newline (\n)</string>
+    <string name="cr">Carriage Return (\r)</string>
+    <string name="both">Both (\r\n)</string>
 </resources>
