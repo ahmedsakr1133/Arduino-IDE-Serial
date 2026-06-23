@@ -143,10 +143,29 @@
             android:id="@+id/serverPortInput"
             android:layout_width="match_parent"
             android:layout_height="48dp"
-            android:layout_marginBottom="32dp"
+            android:layout_marginBottom="12dp"
             android:background="@drawable/bg_input_rounded"
             android:hint="@string/port_hint"
             android:inputType="number"
+            android:paddingHorizontal="12dp"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_secondary" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/manual_ip"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/manualIpInput"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="24dp"
+            android:background="@drawable/bg_input_rounded"
+            android:hint="@string/ip_hint"
+            android:inputType="text"
             android:paddingHorizontal="12dp"
             android:textColor="@color/text_primary"
             android:textColorHint="@color/text_secondary" />

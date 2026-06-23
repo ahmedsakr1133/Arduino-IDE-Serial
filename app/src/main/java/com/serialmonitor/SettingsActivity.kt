@@ -83,6 +83,9 @@ class SettingsActivity : AppCompatActivity() {
         val serverPort = prefs.getInt("server_port", 8080)
         binding.serverPortInput.setText(serverPort.toString())
 
+        val manualIp = prefs.getString("manual_ip", "") ?: ""
+        binding.manualIpInput.setText(manualIp)
+
         val baudRate = prefs.getInt("baud_rate", 115200)
         binding.baudSpinner.setSelection(baudRates.indexOf(baudRate).coerceAtLeast(0))
 
@@ -120,6 +123,7 @@ class SettingsActivity : AppCompatActivity() {
         val theme = themes[binding.themeSpinner.selectedItemPosition]
         val serverPortStr = binding.serverPortInput.text.toString()
         val serverPort = serverPortStr.toIntOrNull() ?: 8080
+        val manualIp = binding.manualIpInput.text.toString().trim()
 
         val baudRate = baudRates[binding.baudSpinner.selectedItemPosition]
         val dataBits = when(binding.dataBitsSpinner.selectedItemPosition) {
@@ -146,6 +150,7 @@ class SettingsActivity : AppCompatActivity() {
             putString("language", lang)
             putString("theme", theme)
             putInt("server_port", serverPort)
+            putString("manual_ip", manualIp)
             putInt("baud_rate", baudRate)
             putInt("data_bits", dataBits)
             putInt("stop_bits", stopBits)

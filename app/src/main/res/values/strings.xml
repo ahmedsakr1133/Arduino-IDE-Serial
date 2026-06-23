@@ -44,6 +44,8 @@
     <string name="night_mode">وضع داكن جداً</string>
     <string name="server_port">منفذ السيرفر</string>
     <string name="port_hint">مثال: 8080</string>
+    <string name="manual_ip">عنوان IP يدوي (اختياري)</string>
+    <string name="ip_hint">مثال: 192.168.1.100</string>
     <string name="connection">الاتصال</string>
     <string name="server">السيرفر</string>
 </resources>

@@ -44,6 +44,8 @@
     <string name="night_mode">Night Mode</string>
     <string name="server_port">Server Port</string>
     <string name="port_hint">e.g. 8080</string>
+    <string name="manual_ip">Manual IP (Optional)</string>
+    <string name="ip_hint">e.g. 192.168.1.100</string>
     <string name="connection">Connection</string>
     <string name="server">Server</string>
 </resources>

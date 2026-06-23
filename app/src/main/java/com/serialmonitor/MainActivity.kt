@@ -394,6 +394,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun getLocalIpAddress(): String {
+        val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
+        val manualIp = prefs.getString("manual_ip", "") ?: ""
+        if (manualIp.isNotEmpty()) return manualIp
+
         try {
             val en = java.net.NetworkInterface.getNetworkInterfaces()
             while (en.hasMoreElements()) {
