@@ -102,6 +102,8 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
 
     fun startServer(port: Int) {
         serverJob?.cancel()
+        try { serverSocket?.close() } catch (ignored: Exception) {}
+        serverSocket = null
         serverJob = serviceScope.launch {
             try {
                 serverSocket = java.net.ServerSocket(port)
@@ -115,19 +117,17 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
                             val inputStream = client.getInputStream()
                             val outputStream = client.getOutputStream()
                             val buffer = ByteArray(2048)
-                            var isFirstRead = true
                             
-                            while (isActive && usbSerialPort != null) {
-                                val bytesRead = inputStream.read(buffer)
-                                if (bytesRead <= 0) break
+                            val bytesRead = inputStream.read(buffer)
+                            if (bytesRead <= 0) return@launch
+                            
+                            val received = String(buffer, 0, bytesRead)
+                            
+                            if (received.startsWith("GET /send?cmd=")) {
+                                val cmd = received.substringAfter("cmd=").substringBefore(" ")
+                                val decodedCmd = java.net.URLDecoder.decode(cmd, "UTF-8")
                                 
-                                val received = String(buffer, 0, bytesRead)
-                                
-                                if (isFirstRead && received.startsWith("GET /send?cmd=")) {
-                                    // Handle HTTP GET
-                                    val cmd = received.substringAfter("cmd=").substringBefore(" ")
-                                    val decodedCmd = java.net.URLDecoder.decode(cmd, "UTF-8")
-                                    
+                                if (usbSerialPort != null) {
                                     val prefs = getSharedPreferences("serial_settings", Context.MODE_PRIVATE)
                                     val lineEnding = prefs.getInt("line_ending", 3)
                                     val suffix = when(lineEnding) {
@@ -136,31 +136,38 @@ class SerialService : Service(), SerialInputOutputManager.Listener {
                                         3 -> "\r\n"
                                         else -> ""
                                     }
-                                    
                                     val dataToSend = (decodedCmd + suffix).toByteArray()
                                     write(dataToSend)
                                     addMessage("[SERVER] $decodedCmd", Message.Type.TX)
                                     emitEvent("SERVER_CMD:$decodedCmd")
-                                    
-                                    val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK: $decodedCmd"
-                                    outputStream.write(response.toByteArray())
-                                    break // HTTP usually closes after one response
-                                } else if (isFirstRead && received.startsWith("GET /")) {
-                                    val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nSerial Monitor Server Running\nUse /send?cmd=YOUR_COMMAND"
-                                    outputStream.write(response.toByteArray())
-                                    break
                                 } else {
-                                    // Handle raw TCP data
-                                    val data = buffer.copyOfRange(0, bytesRead)
-                                    write(data)
-                                    
+                                    addMessage("[SERVER] Command ignored (serial disconnected): $decodedCmd", Message.Type.ERR)
+                                }
+                                
+                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK: $decodedCmd"
+                                outputStream.write(response.toByteArray())
+                            } else if (received.startsWith("GET /")) {
+                                val status = if (usbSerialPort != null) "Connected" else "Disconnected"
+                                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nSerial Monitor Server Running\nSerial: $status\nUse /send?cmd=YOUR_COMMAND"
+                                outputStream.write(response.toByteArray())
+                            } else {
+                                if (usbSerialPort != null) {
+                                    write(buffer.copyOfRange(0, bytesRead))
                                     val displayStr = received.trimEnd('\n', '\r')
                                     if (displayStr.isNotEmpty()) {
                                         addMessage("[SERVER] $displayStr", Message.Type.TX)
                                         emitEvent("SERVER_CMD:$displayStr")
                                     }
+                                    while (isActive && usbSerialPort != null) {
+                                        val more = inputStream.read(buffer)
+                                        if (more <= 0) break
+                                        write(buffer.copyOfRange(0, more))
+                                    }
+                                } else {
+                                    addMessage("[SERVER] Raw data ignored (serial disconnected)", Message.Type.ERR)
+                                    val response = "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\n\r\nSerial not connected"
+                                    outputStream.write(response.toByteArray())
                                 }
-                                isFirstRead = false
                             }
                         } catch (e: Exception) {
                             // Client disconnected or error
